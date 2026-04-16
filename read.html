@@ -300,6 +300,8 @@
 
     function hideSelectionPopover() {
       if (!selectionPopover) return;
+      const active = document.activeElement;
+      if (active && selectionPopover.contains(active)) return;
       selectionPopover.classList.add("hidden");
       selectionPopover.setAttribute("aria-hidden", "true");
       selectionState = null;
@@ -351,7 +353,10 @@
     function handleSelection() {
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed) {
-        hideSelectionPopover();
+        const active = document.activeElement;
+        if (!active || !selectionPopover || !selectionPopover.contains(active)) {
+          hideSelectionPopover();
+        }
         return;
       }
       const range = selection.getRangeAt(0);
@@ -736,7 +741,10 @@
       selectionCheckTimer = window.setTimeout(() => {
         const selection = window.getSelection();
         if (!selection || selection.isCollapsed) {
-          hideSelectionPopover();
+          const active = document.activeElement;
+          if (!active || !selectionPopover || !selectionPopover.contains(active)) {
+            hideSelectionPopover();
+          }
           return;
         }
         const anchor = selection.anchorNode;
