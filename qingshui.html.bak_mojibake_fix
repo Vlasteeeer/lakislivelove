@@ -1,0 +1,89 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lakis' ROOM 路 娓呮按</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-comments-readonly="false" data-scope-category="pure" data-disable-tags="true" data-preview-only="true">
+  <div class="page-shell">
+    <header class="hero-min">
+      <h1 class="hero-min__title">娓呮按</h1>
+      <a class="back-home" href="./index.html?skipGate=1">杩斿洖涓婚〉</a>
+    </header>
+
+    <main class="content-grid">
+      <section class="library">
+        <div class="library__toolbar">
+          <div class="library__row">
+            <input id="searchInput" type="search" placeholder="鎼滅储">
+          </div>
+          <div id="tagFilters" class="tag-filters"></div>
+          <div class="library__footer">
+            <p id="totalCount" class="library__count"></p>
+            <div class="pagination">
+              <button id="prevPage" class="page-button" type="button">涓婁竴椤?/button>
+              <span id="pageInfo" class="page-info"></span>
+              <button id="nextPage" class="page-button" type="button">涓嬩竴椤?/button>
+            </div>
+          </div>
+        </div>
+        <div id="article-list" class="article-list"></div>
+      </section>
+
+      <article class="reader">
+        <div class="reader__meta">
+          <p id="readerCategory" class="reader__category"></p>
+          <p id="readerDate" class="reader__date"></p>
+        </div>
+        <h4 id="readerTitle" class="reader__title"></h4>
+        <p id="readerIntro" class="reader__intro"></p>
+        <div id="readerActions" class="reader__actions"></div>
+        <div id="readerContent" class="reader__content"></div>
+
+        <section class="comments">
+          <div class="comments__header">
+            <span class="comments__title">璇勮</span>
+            <span id="commentsCount" class="comments__count"></span>
+          </div>
+          <div id="commentsList" class="comments__list"></div>
+          <form id="commentForm" class="comments__form">
+            <input id="commentAuthor" type="text" placeholder="绉板懠">
+            <textarea id="commentContent" rows="4" placeholder="璇寸偣浠€涔?></textarea>
+            <p id="commentError" class="error hidden"></p>
+            <p id="commentStatus" class="status"></p>
+            <button class="button button--solid" type="submit">鎻愪氦</button>
+          </form>
+        </section>
+      </article>
+    </main>
+  </div>
+
+  <template id="articleCardTemplate">
+    <button class="article-card" type="button">
+      <div class="article-card__top">
+        <span class="article-card__category"></span>
+        <span class="article-card__date"></span>
+      </div>
+      <h5 class="article-card__title"></h5>
+      <p class="article-card__summary"></p>
+      <div class="article-card__tags"></div>
+    </button>
+  </template>
+
+  <div id="selectionPopover" class="selection-popover hidden" aria-hidden="true">
+    <p id="selectionPreview" class="selection-popover__preview"></p>
+    <form id="selectionForm" class="selection-form">
+      <input id="selectionAuthor" type="text" placeholder="绉板懠">
+      <textarea id="selectionComment" rows="3" placeholder="閽堝鍒掔嚎鍐欒瘎璁?></textarea>
+      <button class="button button--solid" type="submit">鎻愪氦鍒掔嚎璇勮</button>
+    </form>
+  </div>
+
+  <script src="articles-data.js"></script>
+  <script src="config.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
+

@@ -1,0 +1,766 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lakis' ROOM - 阅读全文</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .read-chapter-title {
+      font-family: "KaiTi", "Kaiti SC", "STKaiti", serif;
+      font-size: 1.6rem;
+      margin: 0 0 16px;
+      color: var(--accent);
+    }
+    .read-font-size {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 4px 0 14px;
+    }
+    .read-font-size__label {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .read-font-size__btn {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--text);
+      padding: 4px 12px;
+      font: inherit;
+      cursor: pointer;
+    }
+    .read-font-size__btn.is-active {
+      background: #0b0c11;
+      color: #fff;
+      border-color: #0b0c11;
+    }
+    .chapter-jump {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      margin-left: 8px;
+    }
+    .chapter-jump select {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--text);
+      padding: 6px 12px;
+      font: inherit;
+    }
+    #readContent[data-font-size="small"] p {
+      font-size: 1.02rem;
+    }
+    #readContent[data-font-size="medium"] p {
+      font-size: 1.12rem;
+    }
+    #readContent[data-font-size="large"] p {
+      font-size: 1.24rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero-min">
+      <h1 id="readTitle" class="hero-min__title">阅读全文</h1>
+      <a id="readBack" class="back-home" href="./index.html?skipGate=1">返回</a>
+    </header>
+
+    <article class="reader" style="margin-top:16px;">
+      <div class="reader__meta">
+        <p id="readCategory" class="reader__category"></p>
+        <p id="readDate" class="reader__date"></p>
+      </div>
+      <p id="readSummary" class="reader__intro"></p>
+      <div class="read-font-size" aria-label="正文字号">
+        <span class="read-font-size__label">字号</span>
+        <button id="fontSizeSmall" class="read-font-size__btn" type="button">小</button>
+        <button id="fontSizeMedium" class="read-font-size__btn" type="button">中</button>
+        <button id="fontSizeLarge" class="read-font-size__btn" type="button">大</button>
+      </div>
+      <div id="readContent" class="reader__content"></div>
+      <div id="chapterNav" class="chapter-nav hidden">
+        <button id="prevChapter" class="chapter-button" type="button">上一章</button>
+        <span id="chapterInfo" class="chapter-nav__info"></span>
+        <div class="chapter-jump">
+          <select id="chapterJumpSelect" aria-label="章节跳转"></select>
+          <button id="chapterJumpBtn" class="chapter-button" type="button">跳转</button>
+        </div>
+        <button id="nextChapter" class="chapter-button" type="button">下一章</button>
+      </div>
+
+      <section class="comments" style="margin-top:18px;">
+        <div class="comments__header">
+          <span class="comments__title">评论</span>
+          <span id="readCommentsCount" class="comments__count"></span>
+        </div>
+        <div id="readCommentsList" class="comments__list"></div>
+        <form id="readCommentForm" class="comments__form">
+          <input id="readCommentAuthor" type="text" placeholder="称呼">
+          <textarea id="readCommentContent" rows="4" placeholder="说点什么"></textarea>
+          <p id="readCommentError" class="error hidden"></p>
+          <p id="readCommentStatus" class="status"></p>
+          <button class="button button--solid" type="submit">提交</button>
+        </form>
+      </section>
+    </article>
+  </div>
+
+  <div id="selectionPopover" class="selection-popover hidden" aria-hidden="true">
+    <p id="selectionPreview" class="selection-popover__preview"></p>
+    <form id="selectionForm" class="selection-form">
+      <input id="selectionAuthor" type="text" placeholder="称呼">
+      <textarea id="selectionComment" rows="3" placeholder="针对划线写评论"></textarea>
+      <button class="button button--solid" type="submit">提交划线评论</button>
+    </form>
+  </div>
+
+  <script src="articles-data.js"></script>
+  <script src="config.js"></script>
+  <script>
+    const SUPABASE_URL = window.SUPABASE_URL;
+    const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("id");
+    const back = params.get("back");
+
+    const titleEl = document.getElementById("readTitle");
+    const backEl = document.getElementById("readBack");
+    const categoryEl = document.getElementById("readCategory");
+    const dateEl = document.getElementById("readDate");
+    const summaryEl = document.getElementById("readSummary");
+    const contentEl = document.getElementById("readContent");
+    const chapterNav = document.getElementById("chapterNav");
+    const prevBtn = document.getElementById("prevChapter");
+    const nextBtn = document.getElementById("nextChapter");
+    const chapterInfo = document.getElementById("chapterInfo");
+    const chapterJumpSelect = document.getElementById("chapterJumpSelect");
+    const chapterJumpBtn = document.getElementById("chapterJumpBtn");
+    const commentsCountEl = document.getElementById("readCommentsCount");
+    const commentsListEl = document.getElementById("readCommentsList");
+    const commentFormEl = document.getElementById("readCommentForm");
+    const commentAuthorEl = document.getElementById("readCommentAuthor");
+    const commentContentEl = document.getElementById("readCommentContent");
+    const commentErrorEl = document.getElementById("readCommentError");
+    const commentStatusEl = document.getElementById("readCommentStatus");
+    const selectionPopover = document.getElementById("selectionPopover");
+    const selectionPreview = document.getElementById("selectionPreview");
+    const selectionForm = document.getElementById("selectionForm");
+    const selectionAuthor = document.getElementById("selectionAuthor");
+    const selectionComment = document.getElementById("selectionComment");
+    const fontSizeSmall = document.getElementById("fontSizeSmall");
+    const fontSizeMedium = document.getElementById("fontSizeMedium");
+    const fontSizeLarge = document.getElementById("fontSizeLarge");
+
+    let chapters = [];
+    let hasExplicitChapters = false;
+    let currentChapter = 0;
+    let articleId = id;
+    let isAdmin = false;
+    let selectionState = null;
+    let copyHintTimer = null;
+    let selectionCheckTimer = null;
+    const READ_FONT_SIZE_KEY = "lakis_room_read_font_size";
+    const allowedFontSizes = ["small", "medium", "large"];
+
+    if (back && backEl) backEl.href = back;
+
+    function formatDate(value) {
+      if (!value) return "";
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return String(value);
+      return d.toISOString().slice(0, 10);
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function extractTextFromUnknown(input) {
+      if (input == null) return "";
+      if (typeof input === "string") return input.trim();
+      if (Array.isArray(input)) return input.map((item) => extractTextFromUnknown(item)).filter(Boolean).join("\n\n").trim();
+      if (typeof input === "object") {
+        return extractTextFromUnknown(
+          input.content || input.text || input.body || input.article_content || input.paragraphs || input.chapters
+        );
+      }
+      return String(input).trim();
+    }
+
+        function isChapterHeading(text) {
+      const t = String(text || "").trim();
+      if (!t) return false;
+      if (/^第[一二三四五六七八九十百千万零〇两0-9]+章(?:\s+.*)?$/.test(t)) return true;
+      if (/^[一二三四五六七八九十百千万零〇两0-9]+[、．.]\s*.+$/.test(t)) return true;
+      if (/^[（(][一二三四五六七八九十百千万零〇两0-9]+[)）]\s*.+$/.test(t)) return true;
+      if (/^chapter\s+[0-9ivxlcdm]+(?:\s*[:\-]?\s*.*)?$/i.test(t)) return true;
+      return false;
+    }
+
+    function normalizeChapterHeading(text) {
+      const t = String(text || "").trim().replace(/\s+/g, " ");
+      if (!t) return "";
+      if (/^第[一二三四五六七八九十百千万零〇两0-9]+章/.test(t)) return t;
+
+      const style1 = t.match(/^([一二三四五六七八九十百千万零〇两0-9]+)[、．.]\s*(.*)$/);
+      if (style1) {
+        const suffix = style1[2] ? ` ${style1[2]}` : "";
+        return `第${style1[1]}章${suffix}`;
+      }
+
+      const style2 = t.match(/^[（(]([一二三四五六七八九十百千万零〇两0-9]+)[)）]\s*(.*)$/);
+      if (style2) {
+        const suffix = style2[2] ? ` ${style2[2]}` : "";
+        return `第${style2[1]}章${suffix}`;
+      }
+
+      const style3 = t.match(/^chapter\s+([0-9ivxlcdm]+)(?:\s*[:\-]?\s*(.*))?$/i);
+      if (style3) {
+        const suffix = style3[2] ? ` ${style3[2]}` : "";
+        return `Chapter ${style3[1]}${suffix}`;
+      }
+
+      return t;
+    }
+
+    function isChapterHeadingSmart(text, { isFirstLine = false } = {}) {
+      const t = String(text || "").trim();
+      if (!t) return false;
+      const compactLen = t.replace(/\s+/g, "").length;
+      if (compactLen > 36) return false;
+      if (/[。！？；;!?]$/.test(t)) return false;
+      if (/^第[一二三四五六七八九十百千万零〇两0-9]+章(?:\s+.*)?$/.test(t)) return true;
+      if (/^chapter\s+[0-9ivxlcdm]+(?:\s*[:\-]?\s*.*)?$/i.test(t)) return true;
+      if (isFirstLine) return false;
+      if (/^[一二三四五六七八九十百千万零〇两0-9]+[、．.]\s*.+$/.test(t)) return true;
+      if (/^[（(][一二三四五六七八九十百千万零〇两0-9]+[)）]\s*.+$/.test(t)) return true;
+      return false;
+    }
+    function splitChapters(rawText) {
+      const raw = String(rawText || "").trim();
+      if (!raw) return { chapters: [], explicit: false };
+      const lines = raw.split(/\r?\n/);
+      const trimmedLines = lines.map((line) => line.trim());
+      const firstNonEmptyIndex = trimmedLines.findIndex(Boolean);
+      const headingCount = trimmedLines.reduce((count, line, idx) => {
+        return isChapterHeadingSmart(line, { isFirstLine: idx === firstNonEmptyIndex }) ? count + 1 : count;
+      }, 0);
+      if (headingCount < 2) {
+        return {
+          explicit: false,
+          chapters: [{
+            title: "",
+            paragraphs: raw.split(/\n\s*\n/g).map((p) => p.trim()).filter(Boolean)
+          }]
+        };
+      }
+      const chunks = [];
+      let current = { title: "", paragraphs: [] };
+      let explicit = false;
+
+      function pushCurrent() {
+        if (!current.title && !current.paragraphs.length) return;
+        chunks.push({
+          title: current.title || `第${chunks.length + 1}章`,
+          paragraphs: current.paragraphs.slice()
+        });
+      }
+
+      lines.forEach((line, idx) => {
+        const t = line.trim();
+        const isChapterTitle = isChapterHeadingSmart(t, { isFirstLine: idx === firstNonEmptyIndex });
+        if (isChapterTitle) {
+          explicit = true;
+          pushCurrent();
+          current = { title: normalizeChapterHeading(t), paragraphs: [] };
+          return;
+        }
+        if (!t) return;
+        current.paragraphs.push(t);
+      });
+
+      pushCurrent();
+      if (!chunks.length) {
+        return {
+          explicit: false,
+          chapters: [{ title: "", paragraphs: raw.split(/\n\s*\n/g).map((p) => p.trim()).filter(Boolean) }]
+        };
+      }
+
+      return { chapters: chunks, explicit };
+    }
+
+    function hideSelectionPopover() {
+      if (!selectionPopover) return;
+      selectionPopover.classList.add("hidden");
+      selectionPopover.setAttribute("aria-hidden", "true");
+      selectionState = null;
+    }
+
+    function getSavedReadFontSize() {
+      try {
+        const value = localStorage.getItem(READ_FONT_SIZE_KEY);
+        return allowedFontSizes.includes(value) ? value : "medium";
+      } catch {
+        return "medium";
+      }
+    }
+
+    function setReadFontSize(size) {
+      const value = allowedFontSizes.includes(size) ? size : "medium";
+      contentEl.dataset.fontSize = value;
+      fontSizeSmall.classList.toggle("is-active", value === "small");
+      fontSizeMedium.classList.toggle("is-active", value === "medium");
+      fontSizeLarge.classList.toggle("is-active", value === "large");
+      try {
+        localStorage.setItem(READ_FONT_SIZE_KEY, value);
+      } catch {
+        // ignore
+      }
+    }
+
+    function showSelectionPopover(range, paragraphIndex, text) {
+      if (!selectionPopover || !selectionPreview) return;
+      const rect = range.getBoundingClientRect();
+      const rects = typeof range.getClientRects === "function" ? range.getClientRects() : null;
+      const fallbackRect = rects && rects.length ? rects[0] : null;
+      const targetRect =
+        rect && (rect.width > 0 || rect.height > 0)
+          ? rect
+          : fallbackRect;
+      if (!targetRect) return;
+      const maxLeft = Math.max(12, window.innerWidth - 340);
+      const left = Math.max(12, Math.min(targetRect.left, maxLeft));
+      const top = Math.max(8, targetRect.bottom + 8);
+      selectionPopover.style.top = `${top}px`;
+      selectionPopover.style.left = `${left}px`;
+      selectionPreview.textContent = text.length > 120 ? `${text.slice(0, 120)}...` : text;
+      selectionPopover.classList.remove("hidden");
+      selectionPopover.setAttribute("aria-hidden", "false");
+      selectionState = { paragraphIndex, text };
+    }
+
+    function handleSelection() {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed) {
+        hideSelectionPopover();
+        return;
+      }
+      const range = selection.getRangeAt(0);
+      const container = range.commonAncestorContainer;
+      const element = container.nodeType === 1 ? container : container.parentElement;
+      const paragraph = element ? element.closest("p[data-paragraph]") : null;
+      if (!paragraph || !contentEl.contains(paragraph)) {
+        hideSelectionPopover();
+        return;
+      }
+      const text = selection.toString().trim();
+      if (!text) {
+        hideSelectionPopover();
+        return;
+      }
+      const paragraphIndex = Number(paragraph.dataset.paragraph || 0);
+      showSelectionPopover(range, paragraphIndex, text);
+    }
+
+    function showNoCopyHint() {
+      if (isAdmin || !commentStatusEl) return;
+      commentStatusEl.textContent = "游客不可复制正文";
+      if (copyHintTimer) window.clearTimeout(copyHintTimer);
+      copyHintTimer = window.setTimeout(() => {
+        if (!isAdmin && commentStatusEl.textContent === "游客不可复制正文") {
+          commentStatusEl.textContent = "";
+        }
+      }, 1600);
+    }
+
+    function hasContentSelection() {
+      const selection = window.getSelection();
+      if (!selection || !selection.rangeCount) return false;
+      const anchor = selection.anchorNode;
+      const focus = selection.focusNode;
+      const resolve = (node) => (node && node.nodeType === 1 ? node : node?.parentElement);
+      const a = resolve(anchor);
+      const f = resolve(focus);
+      return Boolean((a && contentEl.contains(a)) || (f && contentEl.contains(f)));
+    }
+
+    function bindVisitorNoCopy() {
+      const block = (event) => {
+        if (isAdmin) return;
+        event.preventDefault();
+        showNoCopyHint();
+      };
+      contentEl.addEventListener("copy", block);
+      contentEl.addEventListener("cut", block);
+      contentEl.addEventListener("dragstart", block);
+      contentEl.addEventListener("contextmenu", (event) => {
+        if (isAdmin) return;
+        const isTouchLike = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+        if (isTouchLike) return;
+        event.preventDefault();
+        showNoCopyHint();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (isAdmin) return;
+        const key = String(event.key || "").toLowerCase();
+        if ((event.ctrlKey || event.metaKey) && (key === "c" || key === "x") && hasContentSelection()) {
+          event.preventDefault();
+          showNoCopyHint();
+        }
+      });
+    }
+
+    function renderChapter() {
+      if (!chapters.length) {
+        contentEl.innerHTML = '<div class="empty-state">娌℃湁鍐呭</div>';
+        chapterNav.classList.add("hidden");
+        return;
+      }
+      const chapter = chapters[currentChapter];
+      const heading = hasExplicitChapters ? `<h2 class="read-chapter-title">${escapeHtml(chapter.title)}</h2>` : "";
+      const paragraphs = chapter.paragraphs.map((p, index) => `<p data-paragraph="${index}">${escapeHtml(p)}</p>`);
+      contentEl.innerHTML = [heading, ...paragraphs].join("");
+      hideSelectionPopover();
+
+      if (hasExplicitChapters && chapters.length > 1) {
+        chapterNav.classList.remove("hidden");
+        chapterInfo.textContent = `${currentChapter + 1} / ${chapters.length}`;
+        prevBtn.disabled = currentChapter <= 0;
+        nextBtn.disabled = currentChapter >= chapters.length - 1;
+        chapterJumpSelect.innerHTML = chapters
+          .map((chapter, index) => {
+            const title = String(chapter.title || `第${index + 1}章`).trim();
+            const label = title.length > 18 ? `${title.slice(0, 18)}...` : title;
+            return `<option value="${index}">${index + 1}. ${escapeHtml(label)}</option>`;
+          })
+          .join("");
+        chapterJumpSelect.value = String(currentChapter);
+      } else {
+        chapterNav.classList.add("hidden");
+      }
+    }
+
+    function jumpToChapter(index) {
+      const nextIndex = Number(index);
+      if (!Number.isInteger(nextIndex)) return;
+      if (nextIndex < 0 || nextIndex >= chapters.length) return;
+      currentChapter = nextIndex;
+      renderChapter();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    prevBtn.addEventListener("click", () => {
+      if (currentChapter <= 0) return;
+      currentChapter -= 1;
+      renderChapter();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+
+    nextBtn.addEventListener("click", () => {
+      if (currentChapter >= chapters.length - 1) return;
+      currentChapter += 1;
+      renderChapter();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+    chapterJumpBtn.addEventListener("click", () => {
+      jumpToChapter(chapterJumpSelect.value);
+    });
+    chapterJumpSelect.addEventListener("change", () => {
+      jumpToChapter(chapterJumpSelect.value);
+    });
+
+    function getSession() {
+      try {
+        const raw = localStorage.getItem("lakis_room_session");
+        if (!raw) return null;
+        const session = JSON.parse(raw);
+        if (!session || !session.access_token || !session.expires_at) return null;
+        if (Date.now() / 1000 > session.expires_at) return null;
+        return session;
+      } catch {
+        return null;
+      }
+    }
+
+    async function apiFetch(path, options = {}) {
+      const headers = { apikey: SUPABASE_ANON_KEY, ...(options.headers || {}) };
+      const session = getSession();
+      if (options.auth && session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+      const res = await fetch(`${SUPABASE_URL}${path}`, {
+        method: options.method || "GET",
+        headers,
+        body: options.body ? JSON.stringify(options.body) : undefined
+      });
+      const text = await res.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+      if (!res.ok) throw new Error((data && data.message) || res.statusText || "请求失败");
+      return data;
+    }
+
+    async function checkAdmin() {
+      const session = getSession();
+      if (!session?.user?.email) {
+        isAdmin = false;
+        return;
+      }
+      try {
+        const rows = await apiFetch(
+          `/rest/v1/admins?select=email&email=eq.${encodeURIComponent(session.user.email)}&limit=1`,
+          { auth: true }
+        );
+        isAdmin = Array.isArray(rows) && rows.length > 0;
+      } catch {
+        isAdmin = false;
+      }
+    }
+
+    function loadSavedName() {
+      try {
+        return localStorage.getItem("lakis_room_comment_name") || "";
+      } catch {
+        return "";
+      }
+    }
+
+    function saveName(value) {
+      try {
+        localStorage.setItem("lakis_room_comment_name", value);
+      } catch {
+        // ignore
+      }
+    }
+
+    async function loadComments() {
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !articleId) return;
+      try {
+        const data = await apiFetch(`/rest/v1/comments?select=*&article_id=eq.${articleId}&order=created_at.desc&limit=80`);
+        const rows = Array.isArray(data)
+          ? data.filter((r) => String(r.comment_type || "general") !== "guestbook")
+          : [];
+        commentsCountEl.textContent = rows.length ? `${rows.length}` : "0";
+        if (!rows.length) {
+          commentsListEl.innerHTML = '<div class="empty-state">暂无评论</div>';
+          return;
+        }
+        commentsListEl.innerHTML = rows
+          .map((c) => {
+            const hasSelection = c.comment_type === "selection" && c.selection_text;
+            const selectionLabel = hasSelection
+              ? `<p class="selection-note">段落 ${Number(c.paragraph_index || 0) + 1}：${escapeHtml(c.selection_text)}</p>`
+              : "";
+            return `
+              <div class="comment">
+                <div class="comment__meta">
+                  <span>${escapeHtml(c.author || "匿名")}</span>
+                  <span>${formatDate(c.created_at)}</span>
+                </div>
+                ${selectionLabel}
+                <p class="comment__content">${escapeHtml(c.content || "")}</p>
+                ${isAdmin ? `<button class="comment__delete" data-id="${c.id}" type="button">删除</button>` : ""}
+              </div>
+            `;
+          })
+          .join("");
+        if (isAdmin) {
+          commentsListEl.querySelectorAll(".comment__delete").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              const cid = btn.getAttribute("data-id");
+              if (!cid) return;
+              const ok = window.confirm("确定删除这条评论吗？");
+              if (!ok) return;
+              try {
+                await apiFetch(`/rest/v1/comments?id=eq.${cid}`, { method: "DELETE", auth: true });
+                await loadComments();
+              } catch {
+                // ignore
+              }
+            });
+          });
+        }
+      } catch {
+        commentsCountEl.textContent = "";
+        commentsListEl.innerHTML = '<div class="empty-state">评论加载失败</div>';
+      }
+    }
+
+    async function submitComment(event) {
+      event.preventDefault();
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !articleId) return;
+      const authorInput = (commentAuthorEl.value || "").trim();
+      const author = authorInput || "匿名";
+      const content = (commentContentEl.value || "").trim();
+      if (!content) return;
+      if (authorInput) saveName(authorInput);
+      commentErrorEl.classList.add("hidden");
+      commentErrorEl.textContent = "";
+      commentStatusEl.textContent = "提交中...";
+      try {
+        await apiFetch(`/rest/v1/comments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: { article_id: articleId, author, content, comment_type: "general" }
+        });
+      } catch (err) {
+        commentErrorEl.textContent = `提交失败：${err.message}`;
+        commentErrorEl.classList.remove("hidden");
+        commentStatusEl.textContent = "";
+        return;
+      }
+      commentContentEl.value = "";
+      commentStatusEl.textContent = "已提交。";
+      await loadComments();
+    }
+
+    async function submitSelectionComment(event) {
+      event.preventDefault();
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !articleId || !selectionState) return;
+      const authorInput = (selectionAuthor.value || "").trim();
+      const author = authorInput || "匿名";
+      const content = (selectionComment.value || "").trim();
+      if (!content) return;
+      if (authorInput) saveName(authorInput);
+      try {
+        await apiFetch(`/rest/v1/comments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: {
+            article_id: articleId,
+            author,
+            content,
+            comment_type: "selection",
+            paragraph_index: selectionState.paragraphIndex,
+            selection_text: selectionState.text
+          }
+        });
+      } catch {
+        return;
+      }
+      selectionComment.value = "";
+      hideSelectionPopover();
+      await loadComments();
+    }
+
+    async function loadArticle() {
+      let article = null;
+      let contentText = "";
+
+      if (id && SUPABASE_URL && SUPABASE_ANON_KEY) {
+        let rows = [];
+        if (isAdmin) {
+          rows = await apiFetch(`/rest/v1/articles?select=*&id=eq.${encodeURIComponent(id)}&limit=1`, { auth: true });
+        } else {
+          try {
+            rows = await apiFetch(`/rest/v1/articles?select=*&id=eq.${encodeURIComponent(id)}&or=(is_private.is.null,is_private.eq.false)&limit=1`);
+          } catch {
+            rows = await apiFetch(`/rest/v1/articles?select=*&id=eq.${encodeURIComponent(id)}&limit=1`);
+          }
+        }
+        if (Array.isArray(rows) && rows[0]) {
+          if (!isAdmin && rows[0].is_private === true) {
+            article = null;
+          } else {
+            article = rows[0];
+            contentText = extractTextFromUnknown(rows[0].content || rows[0].body || rows[0].text || rows[0].chapters);
+          }
+        }
+      }
+
+      if (!article && Array.isArray(window.ARTICLES) && id) {
+        article = window.ARTICLES.find((item) => String(item.id) === String(id)) || null;
+        if (article) contentText = extractTextFromUnknown(article.content || article.body || article.text || article.chapters);
+      }
+
+      if (!article) {
+        titleEl.textContent = "未找到文章";
+        contentEl.innerHTML = '<div class="empty-state">这篇文章不存在或无权限读取。</div>';
+        return;
+      }
+
+      titleEl.textContent = article.title || "阅读全文";
+      categoryEl.textContent = article.category || "";
+      dateEl.textContent = formatDate(article.date || article.created_at);
+      summaryEl.textContent = article.summary || "";
+      articleId = article.id || articleId;
+
+      if (!contentText && summaryEl.textContent) contentText = summaryEl.textContent;
+      const parsed = splitChapters(contentText);
+      chapters = parsed.chapters;
+      hasExplicitChapters = parsed.explicit;
+      currentChapter = 0;
+      renderChapter();
+      await loadComments();
+    }
+
+    const savedName = loadSavedName();
+    if (savedName) {
+      commentAuthorEl.value = savedName;
+      if (selectionAuthor) selectionAuthor.value = savedName;
+    }
+
+    commentAuthorEl.addEventListener("input", (event) => {
+      const v = event.target.value.trim();
+      if (v) saveName(v);
+    });
+    if (selectionAuthor) {
+      selectionAuthor.addEventListener("input", (event) => {
+        const v = event.target.value.trim();
+        if (v) saveName(v);
+      });
+    }
+
+    commentFormEl.addEventListener("submit", submitComment);
+    if (selectionForm) selectionForm.addEventListener("submit", submitSelectionComment);
+    fontSizeSmall.addEventListener("click", () => setReadFontSize("small"));
+    fontSizeMedium.addEventListener("click", () => setReadFontSize("medium"));
+    fontSizeLarge.addEventListener("click", () => setReadFontSize("large"));
+    contentEl.addEventListener("mouseup", handleSelection);
+    contentEl.addEventListener("touchend", () => {
+      window.setTimeout(handleSelection, 80);
+    }, { passive: true });
+    document.addEventListener("selectionchange", () => {
+      if (selectionCheckTimer) window.clearTimeout(selectionCheckTimer);
+      selectionCheckTimer = window.setTimeout(() => {
+        const selection = window.getSelection();
+        if (!selection || selection.isCollapsed) {
+          hideSelectionPopover();
+          return;
+        }
+        const anchor = selection.anchorNode;
+        const focus = selection.focusNode;
+        const resolveEl = (node) => (node && node.nodeType === 1 ? node : node?.parentElement);
+        const a = resolveEl(anchor);
+        const f = resolveEl(focus);
+        if ((a && contentEl.contains(a)) || (f && contentEl.contains(f))) {
+          handleSelection();
+        }
+      }, 120);
+    });
+    bindVisitorNoCopy();
+    setReadFontSize(getSavedReadFontSize());
+
+    document.addEventListener("mousedown", (event) => {
+      if (!selectionPopover) return;
+      if (!selectionPopover.contains(event.target)) hideSelectionPopover();
+    });
+
+    checkAdmin().then(loadArticle);
+  </script>
+</body>
+</html>
+
+
+

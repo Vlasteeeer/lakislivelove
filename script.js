@@ -1,0 +1,1133 @@
+window.__appReady = "loading";
+window.__appError = "";
+
+const fallbackArticles = Array.isArray(window.ARTICLES) ? window.ARTICLES : [];
+const SUPABASE_URL = window.SUPABASE_URL;
+const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
+
+const PAGE_SIZE = 6;
+const NAME_STORAGE_KEY = "lakis_room_comment_name";
+const NAME_PROMPTED_KEY = "lakis_room_name_prompted";
+const SESSION_KEY = "lakis_room_session";
+
+const searchInput = document.querySelector("#searchInput");
+const tagFilters = document.querySelector("#tagFilters");
+const articleList = document.querySelector("#article-list");
+const template = document.querySelector("#articleCardTemplate");
+const totalCount = document.querySelector("#totalCount");
+const pageInfo = document.querySelector("#pageInfo");
+const prevPageButton = document.querySelector("#prevPage");
+const nextPageButton = document.querySelector("#nextPage");
+const adminToggle = document.querySelector("#adminToggle");
+const adminModal = document.querySelector("#adminModal");
+const adminClose = document.querySelector("#adminClose");
+
+const readerCategory = document.querySelector("#readerCategory");
+const readerDate = document.querySelector("#readerDate");
+const readerTitle = document.querySelector("#readerTitle");
+const readerIntro = document.querySelector("#readerIntro");
+const readerActions = document.querySelector("#readerActions");
+const readerContent = document.querySelector("#readerContent");
+const likeButton = document.querySelector("#likeButton");
+const likeCount = document.querySelector("#likeCount");
+const hasLikeUI = Boolean(likeButton || likeCount);
+
+const commentsCount = document.querySelector("#commentsCount");
+const commentsList = document.querySelector("#commentsList");
+const commentForm = document.querySelector("#commentForm");
+const commentAuthor = document.querySelector("#commentAuthor");
+const commentContent = document.querySelector("#commentContent");
+const commentError = document.querySelector("#commentError");
+const commentStatus = document.querySelector("#commentStatus");
+const bodyDataset = document.body && document.body.dataset ? document.body.dataset : {};
+const commentsReadonly = bodyDataset.commentsReadonly === "true";
+const scopeCategory = (bodyDataset.scopeCategory || "").trim();
+const disableTags = bodyDataset.disableTags === "true";
+const previewOnly = bodyDataset.previewOnly === "true";
+const pageParams = new URLSearchParams(window.location.search);
+const queryKeyword = (pageParams.get("q") || "").trim();
+
+const loginForm = document.querySelector("#loginForm");
+const loginEmail = document.querySelector("#loginEmail");
+const loginPassword = document.querySelector("#loginPassword");
+const loginError = document.querySelector("#loginError");
+const loginStatus = document.querySelector("#loginStatus");
+const authStatus = document.querySelector("#authStatus");
+const articleForm = document.querySelector("#articleForm");
+const articleTitle = document.querySelector("#articleTitle");
+const articleCategory = document.querySelector("#articleCategory");
+const articleTags = document.querySelector("#articleTags");
+const articleSummary = document.querySelector("#articleSummary");
+const articleContent = document.querySelector("#articleContent");
+const chapterToggle = document.querySelector("#chapterToggle");
+const chapterEditor = document.querySelector("#chapterEditor");
+const chapterList = document.querySelector("#chapterList");
+const addChapterButton = document.querySelector("#addChapter");
+const logoutButton = document.querySelector("#logoutButton");
+const publishError = document.querySelector("#publishError");
+const publishStatus = document.querySelector("#publishStatus");
+
+const selectionPopover = document.querySelector("#selectionPopover");
+const selectionPreview = document.querySelector("#selectionPreview");
+const selectionForm = document.querySelector("#selectionForm");
+const selectionAuthor = document.querySelector("#selectionAuthor");
+const selectionComment = document.querySelector("#selectionComment");
+
+let activeTag = "all";
+let keyword = "";
+let currentPage = 1;
+let activeArticleId = null;
+let articles = [];
+let selectionState = null;
+let isAdmin = false;
+let likeTotal = 0;
+let chapterCount = 0;
+let noCopyBound = false;
+let copyHintTimer = null;
+let listLastClickId = null;
+let listLastClickAt = 0;
+
+function applyCommentsReadonly() {
+  if (!commentsReadonly || !commentForm) return;
+  commentForm
+    .querySelectorAll("input, textarea, button")
+    .forEach((el) => {
+      el.disabled = true;
+    });
+  commentForm.classList.add("is-readonly");
+  if (commentStatus) {
+    commentStatus.textContent = "评论仅在章节页进行。";
+  }
+  if (selectionPopover) {
+    selectionPopover.classList.add("hidden");
+    selectionPopover.setAttribute("aria-hidden", "true");
+  }
+}
+
+function createChapterItem(title = "", content = "") {
+  if (!chapterList) return;
+  chapterCount += 1;
+  const item = document.createElement("div");
+  item.className = "chapter-item";
+  item.innerHTML = `
+    <div class="chapter-item__row">
+      <input class="chapter-item__title" type="text" placeholder="章节标题" value="${title}">
+      <button class="chapter-remove" type="button">删除</button>
+    </div>
+    <textarea rows="6" placeholder="本章内容">${content}</textarea>
+  `;
+  const remove = item.querySelector(".chapter-remove");
+  remove.addEventListener("click", () => {
+    item.remove();
+  });
+  chapterList.appendChild(item);
+}
+
+function toggleChapterEditor(enabled) {
+  if (!chapterEditor || !articleContent) return;
+  chapterEditor.classList.toggle("hidden", !enabled);
+  articleContent.classList.toggle("hidden", enabled);
+  if (enabled && chapterList && !chapterList.children.length) {
+    createChapterItem();
+  }
+}
+
+function buildChapterText() {
+  if (!chapterList) return "";
+  const items = Array.from(chapterList.querySelectorAll(".chapter-item"));
+  const parts = items
+    .map((item, index) => {
+      const titleInput = item.querySelector(".chapter-item__title");
+      const contentInput = item.querySelector("textarea");
+      const title = titleInput ? titleInput.value.trim() : "";
+      const content = contentInput ? contentInput.value.trim() : "";
+      if (!title && !content) return "";
+      const heading = title || `第${index + 1}章`;
+      return `${heading}\n\n${content}`.trim();
+    })
+    .filter(Boolean);
+  return parts.join("\n\n");
+}
+
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function canonicalCategory(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const lower = raw.toLowerCase();
+  if (lower === "traffic" || raw.includes("交通")) return "traffic";
+  if (lower === "pure" || raw.includes("清水")) return "pure";
+  if (lower === "guestbook" || raw.includes("留言墙") || raw.includes("留言")) return "guestbook";
+  return lower;
+}
+
+function displayCategory(value) {
+  const key = canonicalCategory(value);
+  if (key === "traffic") return "交通";
+  if (key === "pure") return "清水";
+  if (key === "guestbook") return "留言墙";
+  return String(value || "");
+}
+
+function formatDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toISOString().slice(0, 10);
+}
+
+function resolveReadLink(article) {
+  const currentPage = `${window.location.pathname.split("/").pop() || "index.html"}${window.location.search || ""}`;
+  const backParam = `back=${encodeURIComponent(currentPage)}`;
+  if (article && article.id) {
+    return `./read.html?id=${encodeURIComponent(article.id)}&${backParam}`;
+  }
+  return "";
+}
+
+function loadSavedName() {
+  try {
+    return localStorage.getItem(NAME_STORAGE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function saveName(value) {
+  try {
+    localStorage.setItem(NAME_STORAGE_KEY, value);
+  } catch {
+    // ignore
+  }
+}
+
+function markNamePrompted() {
+  try {
+    localStorage.setItem(NAME_PROMPTED_KEY, "1");
+  } catch {
+    // ignore
+  }
+}
+
+function hasPrompted() {
+  try {
+    return localStorage.getItem(NAME_PROMPTED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function getSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const session = JSON.parse(raw);
+    if (!session || !session.access_token || !session.expires_at) return null;
+    if (Date.now() / 1000 > session.expires_at) {
+      localStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+    return session;
+  } catch {
+    return null;
+  }
+}
+
+function setSession(session) {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  } catch {
+    // ignore
+  }
+}
+
+function clearSession() {
+  try {
+    localStorage.removeItem(SESSION_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+async function apiFetch(path, { method = "GET", body, auth = false } = {}) {
+  const headers = {
+    apikey: SUPABASE_ANON_KEY
+  };
+  const session = getSession();
+  if (auth && session?.access_token) {
+    headers.Authorization = `Bearer ${session.access_token}`;
+  } else if (session?.access_token) {
+    headers.Authorization = `Bearer ${session.access_token}`;
+  }
+  if (body) {
+    headers["Content-Type"] = "application/json";
+  }
+  const res = await fetch(`${SUPABASE_URL}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const text = await res.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) {
+    const message =
+      typeof data === "object" && data?.message
+        ? data.message
+        : res.statusText || "Request failed";
+    const error = new Error(message);
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+async function authLogin(email, password) {
+  const data = await apiFetch(
+    `/auth/v1/token?grant_type=password`,
+    {
+      method: "POST",
+      body: { email, password }
+    }
+  );
+  const session = {
+    access_token: data.access_token,
+    refresh_token: data.refresh_token,
+    expires_at: Math.floor(Date.now() / 1000) + data.expires_in,
+    user: data.user
+  };
+  setSession(session);
+  return session;
+}
+
+async function authLogout() {
+  clearSession();
+}
+
+async function checkAdmin() {
+  const session = getSession();
+  if (!session?.user?.email) {
+    isAdmin = false;
+    return;
+  }
+  try {
+    const data = await apiFetch(
+      `/rest/v1/admins?select=email&email=eq.${encodeURIComponent(
+        session.user.email
+      )}&limit=1`,
+      { auth: true }
+    );
+    isAdmin = Array.isArray(data) && data.length > 0;
+  } catch {
+    isAdmin = false;
+  }
+}
+
+function getAllTags() {
+  if (disableTags) return ["all"];
+  const tags = new Set();
+  articles.forEach((article) => {
+    (article.tags || []).forEach((tag) => tags.add(tag));
+  });
+  return ["all", ...tags];
+}
+
+function getFilteredArticles() {
+  const targetScope = canonicalCategory(scopeCategory);
+  return [...articles]
+    .sort((a, b) =>
+      String(b.date || b.created_at || "").localeCompare(
+        String(a.date || a.created_at || "")
+      )
+    )
+    .filter((article) => {
+      const rawCategory = canonicalCategory(article.category);
+      const matchesScope = targetScope ? rawCategory === targetScope : true;
+      const matchesTag =
+        disableTags
+          ? true
+          : activeTag === "all" || (article.tags || []).includes(activeTag);
+      const joinedText = [
+        article.title,
+        article.summary,
+        article.category,
+        ...(article.tags || []),
+        ...((previewOnly ? [] : article.content) || [])
+      ]
+        .join(" ")
+        .toLowerCase();
+      const matchesKeyword = joinedText.includes(normalizeText(keyword));
+      return matchesScope && matchesTag && matchesKeyword;
+    });
+}
+
+function getPageItems(filteredArticles) {
+  const totalPages = Math.max(1, Math.ceil(filteredArticles.length / PAGE_SIZE));
+  currentPage = Math.min(currentPage, totalPages);
+  currentPage = Math.max(currentPage, 1);
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const end = start + PAGE_SIZE;
+  return {
+    totalPages,
+    items: filteredArticles.slice(start, end)
+  };
+}
+
+function renderTags() {
+  if (!tagFilters || disableTags) {
+    if (tagFilters) tagFilters.innerHTML = "";
+    return;
+  }
+  const allTags = getAllTags();
+  tagFilters.innerHTML = "";
+  allTags.forEach((tag) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `tag-filter${tag === activeTag ? " is-active" : ""}`;
+    button.textContent = tag === "all" ? "All" : tag;
+    button.addEventListener("click", () => {
+      activeTag = tag;
+      currentPage = 1;
+      render();
+    });
+    tagFilters.appendChild(button);
+  });
+}
+
+function renderArticleList(pageItems) {
+  articleList.innerHTML = "";
+  if (!pageItems.length) {
+    articleList.innerHTML = '<div class="empty-state">No results</div>';
+    return;
+  }
+
+  pageItems.forEach((article) => {
+    const node = template.content.firstElementChild.cloneNode(true);
+    node.classList.toggle("is-active", article.id === activeArticleId);
+    node.querySelector(".article-card__category").textContent =
+      displayCategory(article.category);
+    node.querySelector(".article-card__date").textContent = formatDate(
+      article.date || article.created_at
+    );
+    node.querySelector(".article-card__title").textContent =
+      article.title || "Untitled";
+    node.querySelector(".article-card__summary").textContent =
+      article.summary || "";
+    const tagsContainer = node.querySelector(".article-card__tags");
+    (article.tags || []).forEach((tag) => {
+      const chip = document.createElement("span");
+      chip.className = "article-card__tag";
+      chip.textContent = tag;
+      tagsContainer.appendChild(chip);
+    });
+    const chapterCount = Number(article.chapterCount || 0);
+    if (chapterCount > 0) {
+      const info = document.createElement("span");
+      info.className = "article-card__chapter-count";
+      info.textContent = `共${chapterCount}章`;
+      tagsContainer.appendChild(info);
+    }
+    const readLink = resolveReadLink(article);
+    node.addEventListener("click", () => {
+      const now = Date.now();
+      const isSecondClick =
+        listLastClickId === article.id && now - listLastClickAt <= 700;
+
+      activeArticleId = article.id;
+      render();
+      loadComments();
+      loadLikes();
+
+      listLastClickId = article.id;
+      listLastClickAt = now;
+
+      if (isSecondClick && readLink) {
+        window.location.href = readLink;
+      }
+    });
+    node.addEventListener("dblclick", () => {
+      if (readLink) window.location.href = readLink;
+    });
+    articleList.appendChild(node);
+  });
+}
+
+function renderReader(filteredArticles) {
+  const article =
+    filteredArticles.find((item) => item.id === activeArticleId) ??
+    filteredArticles[0] ??
+    null;
+
+  if (!article) {
+    readerCategory.textContent = "";
+    readerDate.textContent = "";
+    readerTitle.textContent = "No article";
+    readerIntro.textContent = "";
+    readerActions.innerHTML = "";
+    readerContent.innerHTML = "";
+    commentsCount.textContent = "";
+    commentsList.innerHTML = "";
+    return;
+  }
+
+  activeArticleId = article.id;
+  readerCategory.textContent = displayCategory(article.category);
+  readerDate.textContent = formatDate(article.date || article.created_at);
+  readerTitle.textContent = article.title || "Untitled";
+  readerIntro.textContent =
+    article.summary || String((article.content || [])[0] || "").slice(0, 120);
+  const fullHtml = (article.content || [])
+    .map((paragraph, index) => `<p data-paragraph="${index}">${paragraph}</p>`)
+    .join("");
+  const readLink = resolveReadLink(article);
+  if (previewOnly) {
+    readerActions.innerHTML = readLink
+      ? `<a class="button button--solid" href="${readLink}">阅读全文</a>`
+      : "";
+    readerContent.innerHTML = "";
+  } else {
+    readerActions.innerHTML = readLink
+      ? `<a class="button button--solid" href="${readLink}">阅读全文</a>`
+      : "";
+    readerContent.innerHTML = fullHtml;
+  }
+  if (likeCount) likeCount.textContent = likeTotal ? `${likeTotal}` : "0";
+}
+
+function renderPagination(totalItems, totalPages) {
+  totalCount.textContent = `Total ${totalItems}`;
+  pageInfo.textContent = `${currentPage} / ${totalPages}`;
+  prevPageButton.disabled = currentPage <= 1;
+  nextPageButton.disabled = currentPage >= totalPages;
+}
+
+function ensureActiveArticleVisible(filteredArticles) {
+  const articleStillVisible = filteredArticles.some(
+    (article) => article.id === activeArticleId
+  );
+  if (!articleStillVisible && filteredArticles.length > 0) {
+    activeArticleId = filteredArticles[0].id;
+  }
+}
+
+function render() {
+  const filteredArticles = getFilteredArticles();
+  ensureActiveArticleVisible(filteredArticles);
+  const { totalPages, items } = getPageItems(filteredArticles);
+  renderTags();
+  renderReader(filteredArticles);
+  renderArticleList(items);
+  renderPagination(filteredArticles.length, totalPages);
+}
+
+function toParagraphs(text) {
+  return String(text || "")
+    .split(/\n\s*\n/g)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function countChaptersFromContent(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return 0;
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) return 0;
+  const headingCount = lines.reduce((count, line) => {
+    if (/^第[一二三四五六七八九十百千万零〇两0-9]+章(?:\s+.*)?$/.test(line)) return count + 1;
+    if (/^[一二三四五六七八九十百千万零〇两0-9]+[、．.]\s*.+$/.test(line)) return count + 1;
+    if (/^[（(][一二三四五六七八九十百千万零〇两0-9]+[)）]\s*.+$/.test(line)) return count + 1;
+    if (/^chapter\s+[0-9ivxlcdm]+(?:\s*[:\-]?\s*.*)?$/i.test(line)) return count + 1;
+    return count;
+  }, 0);
+  return headingCount >= 2 ? headingCount : 1;
+}
+
+async function loadArticles() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    articles = fallbackArticles;
+    activeArticleId = articles[0]?.id ?? null;
+    render();
+    return;
+  }
+  try {
+    await checkAdmin();
+    const selectFields = "id,title,category,tags,summary,content,created_at,is_private";
+    let data;
+    if (isAdmin) {
+      try {
+        data = await apiFetch(
+          `/rest/v1/articles?select=${selectFields}&order=created_at.desc`,
+          { auth: true }
+        );
+      } catch {
+        data = await apiFetch(
+          `/rest/v1/articles?select=*&order=created_at.desc`,
+          { auth: true }
+        );
+      }
+    } else {
+      try {
+        data = await apiFetch(
+          `/rest/v1/articles?select=${selectFields}&or=(is_private.is.null,is_private.eq.false)&order=created_at.desc`,
+          { auth: false }
+        );
+      } catch {
+        // fallback for schema differences
+        data = await apiFetch(
+          `/rest/v1/articles?select=*&order=created_at.desc`,
+          { auth: false }
+        );
+      }
+    }
+    if (!data || !data.length) {
+      articles = fallbackArticles;
+    } else {
+      const visibleRows = isAdmin
+        ? data
+        : data.filter((item) => item?.is_private !== true);
+      articles = visibleRows.map((item) => ({
+        ...item,
+        category: displayCategory(item.category),
+        tags: item.tags || [],
+        chapterCount: countChaptersFromContent(item.content),
+        content: previewOnly ? [] : toParagraphs(item.content)
+      }));
+    }
+  } catch {
+    articles = fallbackArticles;
+  }
+
+  activeArticleId = articles[0]?.id ?? null;
+  render();
+  const tasks = [];
+  tasks.push(loadComments());
+  if (hasLikeUI) tasks.push(loadLikes());
+  await Promise.all(tasks);
+}
+
+async function loadComments() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !activeArticleId) {
+    commentsCount.textContent = "";
+    commentsList.innerHTML = "";
+    return;
+  }
+
+  try {
+    const data = await apiFetch(
+      `/rest/v1/comments?select=*&article_id=eq.${activeArticleId}&order=created_at.desc&limit=50`,
+      { auth: false }
+    );
+    const articleComments = (Array.isArray(data) ? data : []).filter(
+      (comment) => String(comment.comment_type || "general") !== "guestbook"
+    );
+    commentsCount.textContent = articleComments.length ? `${articleComments.length}` : "0";
+    if (!articleComments.length) {
+      commentsList.innerHTML = '<div class="empty-state">No comments</div>';
+      return;
+    }
+
+    commentsList.innerHTML = articleComments
+      .map((comment) => {
+        const name = comment.author || "Anonymous";
+        const time = formatDate(comment.created_at);
+        const content = String(comment.content || "");
+        const hasSelection =
+          comment.comment_type === "selection" && comment.selection_text;
+        const selectionLabel = hasSelection
+          ? `<p class="selection-note">Paragraph ${comment.paragraph_index + 1}: ${comment.selection_text}</p>`
+          : "";
+        const deleteButton = isAdmin
+          ? `<button class="comment__delete" data-id="${comment.id}" type="button">Delete</button>`
+          : "";
+        return `
+          <div class="comment">
+            <div class="comment__meta">
+              <span>${name}</span>
+              <span>${time}</span>
+            </div>
+            ${selectionLabel}
+            <p class="comment__content">${content}</p>
+            ${deleteButton}
+          </div>
+        `;
+      })
+      .join("");
+
+    if (isAdmin) {
+      commentsList.querySelectorAll(".comment__delete").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const id = button.getAttribute("data-id");
+          if (!id) return;
+          const ok = window.confirm("Delete this comment?");
+          if (!ok) return;
+          try {
+            await apiFetch(`/rest/v1/comments?id=eq.${id}`, {
+              method: "DELETE",
+              auth: true
+            });
+            await loadComments();
+          } catch {
+            // ignore
+          }
+        });
+      });
+    }
+  } catch {
+    commentsCount.textContent = "";
+    commentsList.innerHTML = '<div class="empty-state">Comments failed</div>';
+  }
+}
+
+async function loadLikes() {
+  if (!hasLikeUI) return;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !activeArticleId) {
+    if (likeCount) likeCount.textContent = "0";
+    return;
+  }
+  try {
+    const data = await apiFetch(
+      `/rest/v1/likes?select=id&article_id=eq.${activeArticleId}`,
+      { auth: false }
+    );
+    likeTotal = Array.isArray(data) ? data.length : 0;
+    if (likeCount) likeCount.textContent = `${likeTotal}`;
+  } catch {
+    if (likeCount) likeCount.textContent = "0";
+  }
+}
+
+async function submitComment(event) {
+  event.preventDefault();
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !activeArticleId) return;
+  const authorInput = commentAuthor.value.trim();
+  const author = authorInput || "Anonymous";
+  const content = commentContent.value.trim();
+  if (!content) return;
+  if (authorInput) saveName(authorInput);
+  if (commentError) {
+    commentError.classList.add("hidden");
+    commentError.textContent = "";
+  }
+  if (commentStatus) {
+    commentStatus.textContent = "Submitting...";
+  }
+
+  try {
+    await apiFetch(`/rest/v1/comments`, {
+      method: "POST",
+      body: {
+        article_id: activeArticleId,
+        author,
+        content,
+        comment_type: "general"
+      },
+      auth: false
+    });
+  } catch (err) {
+    if (commentError) {
+      commentError.textContent = `Submit failed: ${err.message}`;
+      commentError.classList.remove("hidden");
+    }
+    if (commentStatus) commentStatus.textContent = "";
+    return;
+  }
+
+  if (commentStatus) commentStatus.textContent = "Submitted";
+  commentContent.value = "";
+  await loadComments();
+  if (!authorInput && !hasPrompted()) {
+    const shouldSave = window.confirm("Remember your name for next time?");
+    if (shouldSave) {
+      const name = window.prompt("Enter a name to remember:", "");
+      if (name && name.trim()) {
+        saveName(name.trim());
+        if (commentAuthor) commentAuthor.value = name.trim();
+        if (selectionAuthor) selectionAuthor.value = name.trim();
+      }
+    }
+    markNamePrompted();
+  }
+}
+
+function hideSelectionPopover() {
+  if (!selectionPopover) return;
+  selectionPopover.classList.add("hidden");
+  selectionPopover.setAttribute("aria-hidden", "true");
+  selectionState = null;
+}
+
+function showSelectionPopover(range, paragraphIndex, text) {
+  if (!selectionPopover || !selectionPreview) return;
+  const rect = range.getBoundingClientRect();
+  selectionPopover.style.top = `${rect.bottom + 8}px`;
+  selectionPopover.style.left = `${Math.min(rect.left, window.innerWidth - 340)}px`;
+  selectionPreview.textContent = text.length > 120 ? `${text.slice(0, 120)}...` : text;
+  selectionPopover.classList.remove("hidden");
+  selectionPopover.setAttribute("aria-hidden", "false");
+  selectionState = { paragraphIndex, text };
+}
+
+function handleSelection() {
+  if (!readerContent) return;
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed) {
+    hideSelectionPopover();
+    return;
+  }
+  const range = selection.getRangeAt(0);
+  const container = range.commonAncestorContainer;
+  const element =
+    container.nodeType === 1 ? container : container.parentElement;
+  const paragraph = element ? element.closest("p[data-paragraph]") : null;
+  if (!paragraph || !readerContent.contains(paragraph)) {
+    hideSelectionPopover();
+    return;
+  }
+  const text = selection.toString().trim();
+  if (!text) {
+    hideSelectionPopover();
+    return;
+  }
+  const paragraphIndex = Number(paragraph.dataset.paragraph || 0);
+  showSelectionPopover(range, paragraphIndex, text);
+}
+
+async function submitSelectionComment(event) {
+  event.preventDefault();
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !activeArticleId || !selectionState) {
+    return;
+  }
+  const authorInput = selectionAuthor.value.trim();
+  const author = authorInput || "Anonymous";
+  const content = selectionComment.value.trim();
+  if (!content) return;
+  if (authorInput) saveName(authorInput);
+
+  try {
+    await apiFetch(`/rest/v1/comments`, {
+      method: "POST",
+      body: {
+        article_id: activeArticleId,
+        author,
+        content,
+        comment_type: "selection",
+        paragraph_index: selectionState.paragraphIndex,
+        selection_text: selectionState.text
+      },
+      auth: false
+    });
+  } catch {
+    return;
+  }
+
+  selectionComment.value = "";
+  hideSelectionPopover();
+  await loadComments();
+  if (!authorInput && !hasPrompted()) {
+    const shouldSave = window.confirm("Remember your name for next time?");
+    if (shouldSave) {
+      const name = window.prompt("Enter a name to remember:", "");
+      if (name && name.trim()) {
+        saveName(name.trim());
+        if (commentAuthor) commentAuthor.value = name.trim();
+        if (selectionAuthor) selectionAuthor.value = name.trim();
+      }
+    }
+    markNamePrompted();
+  }
+}
+
+function openModal() {
+  adminModal.classList.remove("hidden");
+  adminModal.setAttribute("aria-hidden", "false");
+}
+
+function closeModal() {
+  adminModal.classList.add("hidden");
+  adminModal.setAttribute("aria-hidden", "true");
+}
+
+async function updateAuthState() {
+  const session = getSession();
+  const hasSession = Boolean(session?.access_token);
+  if (loginForm) loginForm.classList.toggle("hidden", hasSession);
+  if (articleForm) articleForm.classList.toggle("hidden", !hasSession);
+  if (loginError) {
+    loginError.classList.add("hidden");
+    loginError.textContent = "";
+  }
+  if (commentError) {
+    commentError.classList.add("hidden");
+    commentError.textContent = "";
+  }
+  if (loginStatus) loginStatus.textContent = hasSession ? "Logged in" : "Logged out";
+  if (authStatus) authStatus.textContent = hasSession ? "Ready to publish" : "Logged out";
+  await checkAdmin();
+  await loadComments();
+}
+
+async function handleLogin(event) {
+  event.preventDefault();
+  const email = loginEmail.value.trim();
+  const password = loginPassword.value;
+  if (!email || !password) return;
+  try {
+    await authLogin(email, password);
+  } catch (err) {
+    if (loginError) {
+      loginError.textContent = `Login failed: ${err.message}`;
+      loginError.classList.remove("hidden");
+    }
+    return;
+  }
+  loginPassword.value = "";
+  await updateAuthState();
+  await loadComments();
+}
+
+async function handleLogout() {
+  await authLogout();
+  await updateAuthState();
+  await loadComments();
+}
+
+async function handlePublish(event) {
+  event.preventDefault();
+  const title = articleTitle.value.trim();
+  const category = articleCategory.value.trim() || scopeCategory;
+  const tags = articleTags.value
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+  const summary = articleSummary.value.trim();
+  const contentText = chapterToggle?.checked
+    ? buildChapterText()
+    : articleContent.value.trim();
+
+  if (!title || !contentText) {
+    if (publishError) {
+      publishError.textContent = "Title and content are required";
+      publishError.classList.remove("hidden");
+    }
+    return;
+  }
+
+  if (publishError) {
+    publishError.classList.add("hidden");
+    publishError.textContent = "";
+  }
+  if (publishStatus) publishStatus.textContent = "Publishing...";
+
+  try {
+    await apiFetch(`/rest/v1/articles`, {
+      method: "POST",
+      body: {
+        title,
+        category,
+        tags,
+        summary,
+        content: contentText
+      },
+      auth: true
+    });
+  } catch (err) {
+    if (publishError) {
+      publishError.textContent = `Publish failed: ${err.message}`;
+      publishError.classList.remove("hidden");
+    }
+    if (publishStatus) publishStatus.textContent = "";
+    return;
+  }
+
+  if (publishStatus) publishStatus.textContent = "Published";
+  articleTitle.value = "";
+  articleCategory.value = "";
+  articleTags.value = "";
+  articleSummary.value = "";
+  articleContent.value = "";
+  if (chapterList) {
+    chapterList.innerHTML = "";
+    chapterCount = 0;
+  }
+  if (chapterToggle) {
+    chapterToggle.checked = false;
+    toggleChapterEditor(false);
+  }
+  await loadArticles();
+}
+
+async function handleLike() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !activeArticleId) return;
+  const anonId =
+    localStorage.getItem("lakis_room_anon_id") ||
+    `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  localStorage.setItem("lakis_room_anon_id", anonId);
+  try {
+    await apiFetch(`/rest/v1/likes`, {
+      method: "POST",
+      body: {
+        article_id: activeArticleId,
+        anon_id: anonId
+      },
+      auth: false
+    });
+    await loadLikes();
+  } catch {
+    // ignore
+  }
+}
+
+function showNoCopyHint() {
+  if (isAdmin || !commentStatus) return;
+  commentStatus.textContent = "游客不可复制正文";
+  if (copyHintTimer) window.clearTimeout(copyHintTimer);
+  copyHintTimer = window.setTimeout(() => {
+    if (!isAdmin && commentStatus.textContent === "游客不可复制正文") {
+      commentStatus.textContent = "";
+    }
+  }, 1600);
+}
+
+function hasReaderSelection() {
+  if (!readerContent) return false;
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount) return false;
+  const anchor = selection.anchorNode;
+  const focus = selection.focusNode;
+  const resolve = (node) => (node && node.nodeType === 1 ? node : node?.parentElement);
+  const anchorEl = resolve(anchor);
+  const focusEl = resolve(focus);
+  return Boolean(
+    (anchorEl && readerContent.contains(anchorEl)) ||
+    (focusEl && readerContent.contains(focusEl))
+  );
+}
+
+function bindNoCopyForVisitor() {
+  if (!readerContent || noCopyBound) return;
+  noCopyBound = true;
+
+  const block = (event) => {
+    if (isAdmin) return;
+    event.preventDefault();
+    showNoCopyHint();
+  };
+
+  readerContent.addEventListener("copy", block);
+  readerContent.addEventListener("cut", block);
+  readerContent.addEventListener("dragstart", block);
+  readerContent.addEventListener("contextmenu", block);
+
+  document.addEventListener("keydown", (event) => {
+    if (isAdmin) return;
+    const key = String(event.key || "").toLowerCase();
+    if ((event.ctrlKey || event.metaKey) && (key === "c" || key === "x") && hasReaderSelection()) {
+      event.preventDefault();
+      showNoCopyHint();
+    }
+  });
+}
+
+if (searchInput) {
+  if (queryKeyword) {
+    keyword = queryKeyword;
+    searchInput.value = queryKeyword;
+  }
+  searchInput.addEventListener("input", (event) => {
+    keyword = event.target.value;
+    currentPage = 1;
+    render();
+  });
+}
+
+if (prevPageButton) {
+  prevPageButton.addEventListener("click", () => {
+    if (currentPage > 1) {
+      currentPage -= 1;
+      render();
+    }
+  });
+}
+
+if (nextPageButton) {
+  nextPageButton.addEventListener("click", () => {
+    const filteredArticles = getFilteredArticles();
+    const totalPages = Math.max(
+      1,
+      Math.ceil(filteredArticles.length / PAGE_SIZE)
+    );
+    if (currentPage < totalPages) {
+      currentPage += 1;
+      render();
+    }
+  });
+}
+
+if (!commentsReadonly) {
+  if (commentForm) commentForm.addEventListener("submit", submitComment);
+  if (readerContent) readerContent.addEventListener("mouseup", handleSelection);
+}
+if (readerContent) bindNoCopyForVisitor();
+if (likeButton) likeButton.addEventListener("click", handleLike);
+document.addEventListener("mousedown", (event) => {
+  if (!selectionPopover) return;
+  if (!selectionPopover.contains(event.target)) {
+    hideSelectionPopover();
+  }
+});
+if (selectionForm && !commentsReadonly) {
+  selectionForm.addEventListener("submit", submitSelectionComment);
+}
+if (chapterToggle) {
+  chapterToggle.addEventListener("change", (event) => {
+    toggleChapterEditor(event.target.checked);
+  });
+}
+if (addChapterButton) {
+  addChapterButton.addEventListener("click", () => createChapterItem());
+}
+if (adminToggle) adminToggle.addEventListener("click", openModal);
+if (adminClose) adminClose.addEventListener("click", closeModal);
+if (adminModal) {
+  adminModal.addEventListener("click", (event) => {
+    if (event.target === adminModal) closeModal();
+  });
+}
+if (loginForm) loginForm.addEventListener("submit", handleLogin);
+if (articleForm) articleForm.addEventListener("submit", handlePublish);
+if (logoutButton) logoutButton.addEventListener("click", handleLogout);
+
+const savedName = loadSavedName();
+if (savedName) {
+  if (commentAuthor) commentAuthor.value = savedName;
+  if (selectionAuthor) selectionAuthor.value = savedName;
+}
+
+if (commentAuthor) {
+  commentAuthor.addEventListener("input", (event) => {
+    if (event.target.value.trim()) saveName(event.target.value.trim());
+  });
+}
+if (selectionAuthor) {
+  selectionAuthor.addEventListener("input", (event) => {
+    if (event.target.value.trim()) saveName(event.target.value.trim());
+  });
+}
+
+applyCommentsReadonly();
+
+try {
+  loadArticles();
+  updateAuthState();
+  window.__appReady = "ready";
+} catch (err) {
+  window.__appReady = "error";
+  window.__appError = err && err.message ? err.message : String(err);
+}
+

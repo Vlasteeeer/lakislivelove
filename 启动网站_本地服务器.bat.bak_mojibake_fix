@@ -1,0 +1,23 @@
+﻿@echo off
+chcp 65001 >nul
+cd /d "%~dp0"
+
+set PORT=8090
+echo 姝ｅ湪鍚姩鏈湴鏈嶅姟鍣細http://localhost:%PORT%/
+echo 璇蜂繚鎸佹绐楀彛鎵撳紑锛屽叧闂獥鍙ｅ嵆鍋滄缃戠珯銆?
+where py >nul 2>nul
+if %errorlevel%==0 (
+  start "" "http://localhost:%PORT%/index.html"
+  py -m http.server %PORT%
+  goto :eof
+)
+
+where python >nul 2>nul
+if %errorlevel%==0 (
+  start "" "http://localhost:%PORT%/index.html"
+  python -m http.server %PORT%
+  goto :eof
+)
+
+echo 鏈娴嬪埌 Python锛屾棤娉曞惎鍔ㄦ湰鍦版湇鍔″櫒銆?echo 璇峰厛瀹夎 Python锛屾垨缁х画浣跨敤鍘熸潵鐨勬墦寮€鏂瑰紡銆?pause
+

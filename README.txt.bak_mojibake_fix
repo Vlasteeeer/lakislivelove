@@ -1,0 +1,17 @@
+水墨文集（在线版）
+
+主要文件：
+- index.html：主页
+- styles.css：水墨风格样式
+- script.js：前端逻辑（读取文章、评论、管理员发布）
+- config.js：Supabase 配置（Project URL + Publishable Key）
+- articles-data.js：本地备用数据（Supabase 失败时才会显示）
+
+在线功能说明：
+- 文章从 Supabase 数据库读取
+- 评论写入 Supabase 的 comments 表
+- 管理员登录后可发布文章
+
+注意：
+- 需要在 Supabase 建表并设置 RLS 策略
+- 需要在 Supabase Auth 里创建管理员账号

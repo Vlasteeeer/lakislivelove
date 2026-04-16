@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Debug</title>
+</head>
+<body>
+  <pre id="out">loading</pre>
+  <script src="config.js?v=7"></script>
+  <script src="script.js?v=7"></script>
+  <script>
+    const out = document.getElementById("out");
+    out.textContent = [
+      `appReady=${window.__appReady}`,
+      `appError=${window.__appError || ""}`,
+      `url=${window.SUPABASE_URL || ""}`
+    ].join("\n");
+  </script>
+</body>
+</html>

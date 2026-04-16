@@ -1,0 +1,616 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lakis' ROOM 路 鐣欒█澧?/title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero-min">
+      <h1 class="hero-min__title">鐣欒█澧?/h1>
+      <a class="back-home" href="./index.html?skipGate=1">杩斿洖涓婚〉</a>
+    </header>
+
+    <section class="guestbook">
+      <div class="guestbook__form">
+        <input id="guestName" type="text" placeholder="鏄电О">
+        <textarea id="guestMessage" rows="4" placeholder="鍐欎笅浣犵殑鐣欒█"></textarea>
+        <div class="guestbook__actions">
+          <button id="guestSubmit" class="button button--solid" type="button">閫夋嫨浣嶇疆鎶曟斁</button>
+          <button id="guestClearAll" class="button button--ghost hidden" type="button">娓呯┖鍏ㄩ儴</button>
+        </div>
+        <div class="guestbook__hint">鎻愪氦鍚庡湪涓嬫柟鐣欒█鏉跨偣鍑讳綅缃姇鏀撅紝鏀寔閲嶅彔鎽嗘斁銆?/div>
+        <div id="guestStatus" class="settings__status"></div>
+      </div>
+      <div id="guestWall" class="guestbook__wall"></div>
+    </section>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const SUPABASE_URL = window.SUPABASE_URL;
+    const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
+    const NAME_STORAGE_KEY = "lakis_room_comment_name";
+    const SESSION_KEY = "lakis_room_session";
+    const LOCAL_KEY = "lakis_room_guestbook_local";
+    const HIDDEN_KEY = "lakis_room_guestbook_hidden_ids";
+    const GUESTBOOK_TITLE = "鐣欒█澧?;
+
+    const nameInput = document.getElementById("guestName");
+    const messageInput = document.getElementById("guestMessage");
+    const submitButton = document.getElementById("guestSubmit");
+    const clearAllButton = document.getElementById("guestClearAll");
+    const wall = document.getElementById("guestWall");
+    const statusEl = document.getElementById("guestStatus");
+
+    let isAdmin = false;
+    let guestbookArticleId = null;
+    let notesCache = [];
+    let pendingNote = null;
+    let ghostNoteEl = null;
+    let topZ = Date.now();
+
+    function formatDate(value) {
+      if (!value) return "";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value);
+      return date.toISOString().slice(0, 10);
+    }
+
+    function loadSavedName() {
+      try {
+        return localStorage.getItem(NAME_STORAGE_KEY) || "";
+      } catch {
+        return "";
+      }
+    }
+
+    function saveName(value) {
+      try {
+        localStorage.setItem(NAME_STORAGE_KEY, value);
+      } catch {
+        // ignore
+      }
+    }
+
+    function getSession() {
+      try {
+        const raw = localStorage.getItem(SESSION_KEY);
+        if (!raw) return null;
+        const session = JSON.parse(raw);
+        if (!session || !session.access_token || !session.expires_at) return null;
+        if (Date.now() / 1000 > session.expires_at) return null;
+        return session;
+      } catch {
+        return null;
+      }
+    }
+
+    function loadLocalNotes() {
+      try {
+        const raw = localStorage.getItem(LOCAL_KEY);
+        const data = raw ? JSON.parse(raw) : [];
+        return Array.isArray(data) ? data : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveLocalNotes(list) {
+      try {
+        localStorage.setItem(LOCAL_KEY, JSON.stringify(list));
+      } catch {
+        // ignore
+      }
+    }
+
+    function loadHiddenIds() {
+      try {
+        const raw = localStorage.getItem(HIDDEN_KEY);
+        const list = raw ? JSON.parse(raw) : [];
+        return new Set(Array.isArray(list) ? list.map((v) => String(v)) : []);
+      } catch {
+        return new Set();
+      }
+    }
+
+    function saveHiddenIds(set) {
+      try {
+        localStorage.setItem(HIDDEN_KEY, JSON.stringify(Array.from(set)));
+      } catch {
+        // ignore
+      }
+    }
+
+    function markHiddenIds(ids) {
+      const hidden = loadHiddenIds();
+      ids.forEach((id) => {
+        if (id != null) hidden.add(String(id));
+      });
+      saveHiddenIds(hidden);
+    }
+
+    function unmarkHiddenIds(ids) {
+      const hidden = loadHiddenIds();
+      ids.forEach((id) => {
+        if (id != null) hidden.delete(String(id));
+      });
+      saveHiddenIds(hidden);
+    }
+
+    function clamp(num, min, max) {
+      return Math.max(min, Math.min(max, num));
+    }
+
+    function nextTopZ() {
+      topZ = Math.max(topZ + 1, Date.now());
+      return topZ;
+    }
+
+    function bringNoteToFront(noteEl) {
+      if (!noteEl || !noteEl.classList || !noteEl.classList.contains("guest-note")) return;
+      noteEl.style.zIndex = String(nextTopZ());
+      if (noteEl.parentNode === wall) {
+        wall.appendChild(noteEl);
+      }
+    }
+
+    function wallMetrics() {
+      return {
+        width: Math.max(1, wall.clientWidth),
+        height: Math.max(1, wall.clientHeight),
+        left: wall.getBoundingClientRect().left + wall.clientLeft,
+        top: wall.getBoundingClientRect().top + wall.clientTop
+      };
+    }
+
+    function clampWithinWall(x, y, noteWidth, noteHeight) {
+      const metrics = wallMetrics();
+      return {
+        x: clamp(x, 0, Math.max(0, metrics.width - noteWidth)),
+        y: clamp(y, 0, Math.max(0, metrics.height - noteHeight))
+      };
+    }
+
+    function placeByCenter(clientX, clientY, noteWidth, noteHeight) {
+      const metrics = wallMetrics();
+      const rawX = clientX - metrics.left - noteWidth / 2;
+      const rawY = clientY - metrics.top - noteHeight / 2;
+      return clampWithinWall(rawX, rawY, noteWidth, noteHeight);
+    }
+
+    function toMeta(item, index = 0) {
+      const fallback = {
+        x: 8 + (index % 7) * 11,
+        y: 8 + Math.floor(index / 7) * 13,
+        z: Date.now() + index
+      };
+      const raw = item && item.selection_text ? String(item.selection_text) : "";
+      if (!raw) return fallback;
+      try {
+        const parsed = JSON.parse(raw);
+        const x = Number(parsed.x);
+        const y = Number(parsed.y);
+        const z = Number(parsed.z);
+        return {
+          x: Number.isFinite(x) ? clamp(x, 0, 100) : fallback.x,
+          y: Number.isFinite(y) ? clamp(y, 0, 100) : fallback.y,
+          z: Number.isFinite(z) ? z : fallback.z
+        };
+      } catch {
+        return fallback;
+      }
+    }
+
+    function applySavedPosition(noteEl, meta) {
+      const metrics = wallMetrics();
+      const noteWidth = noteEl.offsetWidth || 220;
+      const noteHeight = noteEl.offsetHeight || 120;
+      const rawX = (Number(meta?.x) || 0) / 100 * metrics.width;
+      const rawY = (Number(meta?.y) || 0) / 100 * metrics.height;
+      const p = clampWithinWall(rawX, rawY, noteWidth, noteHeight);
+      noteEl.style.left = `${p.x}px`;
+      noteEl.style.top = `${p.y}px`;
+    }
+
+    function createGhostIfNeeded() {
+      if (!pendingNote) return null;
+      if (!ghostNoteEl) {
+        ghostNoteEl = document.createElement("div");
+        ghostNoteEl.className = "guest-note guest-note--ghost";
+        ghostNoteEl.innerHTML = `
+          <div class="guest-note__meta">
+            <span></span>
+            <span>棰勮</span>
+          </div>
+          <div class="guest-note__content"></div>
+        `;
+        wall.appendChild(ghostNoteEl);
+      }
+      const authorEl = ghostNoteEl.querySelector(".guest-note__meta span");
+      const contentEl = ghostNoteEl.querySelector(".guest-note__content");
+      if (authorEl) authorEl.textContent = pendingNote.author || "Anonymous";
+      if (contentEl) contentEl.textContent = pendingNote.content || "";
+      return ghostNoteEl;
+    }
+
+    function removeGhost() {
+      if (ghostNoteEl && ghostNoteEl.parentNode) {
+        ghostNoteEl.parentNode.removeChild(ghostNoteEl);
+      }
+      ghostNoteEl = null;
+    }
+
+    function updateGhost(clientX, clientY) {
+      if (!pendingNote) return;
+      const ghost = createGhostIfNeeded();
+      if (!ghost) return;
+      const noteWidth = ghost.offsetWidth || 220;
+      const noteHeight = ghost.offsetHeight || 120;
+      const p = placeByCenter(clientX, clientY, noteWidth, noteHeight);
+      ghost.style.left = `${p.x}px`;
+      ghost.style.top = `${p.y}px`;
+      ghost.style.zIndex = `${Date.now()}`;
+    }
+
+    async function apiFetch(path, { method = "GET", body, auth = false } = {}) {
+      const headers = { apikey: SUPABASE_ANON_KEY };
+      const session = getSession();
+      if (auth && session?.access_token) {
+        headers.Authorization = `Bearer ${session.access_token}`;
+      }
+      if (body) headers["Content-Type"] = "application/json";
+      const res = await fetch(`${SUPABASE_URL}${path}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined
+      });
+      const text = await res.text();
+      let data;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+      if (!res.ok) {
+        const message = typeof data === "object" && data?.message ? data.message : (res.statusText || "Request failed");
+        throw new Error(message);
+      }
+      return data;
+    }
+
+    async function loadGuestbookArticleId() {
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+      try {
+        const data = await apiFetch(
+          `/rest/v1/articles?select=id,title&title=eq.${encodeURIComponent(GUESTBOOK_TITLE)}&limit=1`
+        );
+        guestbookArticleId = Array.isArray(data) && data[0] ? data[0].id : null;
+        return guestbookArticleId;
+      } catch {
+        guestbookArticleId = null;
+        return null;
+      }
+    }
+
+    async function ensureGuestbookArticle() {
+      if (guestbookArticleId) return guestbookArticleId;
+      await loadGuestbookArticleId();
+      if (guestbookArticleId) return guestbookArticleId;
+      if (!isAdmin) return null;
+
+      try {
+        await apiFetch(`/rest/v1/articles`, {
+          method: "POST",
+          auth: true,
+          body: {
+            title: GUESTBOOK_TITLE,
+            category: "鐣欒█澧?,
+            tags: ["鐣欒█澧?],
+            summary: "",
+            content: ""
+          }
+        });
+      } catch {
+        // ignore
+      }
+      await loadGuestbookArticleId();
+      return guestbookArticleId;
+    }
+
+    async function checkAdmin() {
+      const session = getSession();
+      if (!session?.user?.email || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        isAdmin = false;
+        clearAllButton.classList.add("hidden");
+        return;
+      }
+      try {
+        const data = await apiFetch(
+          `/rest/v1/admins?select=email&email=eq.${encodeURIComponent(session.user.email)}&limit=1`,
+          { auth: true }
+        );
+        isAdmin = Array.isArray(data) && data.length > 0;
+      } catch {
+        isAdmin = false;
+      }
+      clearAllButton.classList.toggle("hidden", !isAdmin);
+    }
+
+    function renderNotes(list) {
+      wall.innerHTML = "";
+      const items = list
+        .map((item, index) => ({ ...item, _meta: toMeta(item, index) }))
+        .sort((a, b) => (a._meta.z || 0) - (b._meta.z || 0));
+      topZ = Math.max(
+        Date.now(),
+        ...items.map((item) => Number(item?._meta?.z) || 0)
+      );
+
+      items.forEach((item) => {
+        const note = document.createElement("div");
+        note.className = "guest-note";
+        note.style.zIndex = String(item._meta.z || 1);
+
+        const name = item.author || "Anonymous";
+        const time = formatDate(item.created_at);
+        const content = item.content || "";
+        const deleteButton =
+          isAdmin && item.id
+            ? `<div class="guest-note__actions"><button class="guest-note__delete" type="button" data-id="${item.id}">Delete</button></div>`
+            : "";
+
+        note.innerHTML = `
+          <div class="guest-note__meta">
+            <span>${name}</span>
+            <span>${time}</span>
+          </div>
+          <div class="guest-note__content"></div>
+          ${deleteButton}
+        `;
+
+        const contentEl = note.querySelector(".guest-note__content");
+        if (contentEl) contentEl.textContent = content;
+        note.addEventListener("pointerdown", (event) => {
+          if (pendingNote) return;
+          if (event.target && event.target.closest(".guest-note__delete")) return;
+          bringNoteToFront(note);
+        });
+        wall.appendChild(note);
+        applySavedPosition(note, item._meta);
+      });
+
+      if (isAdmin) {
+        wall.querySelectorAll(".guest-note__delete").forEach((button) => {
+          button.addEventListener("click", async () => {
+            const id = button.getAttribute("data-id");
+            if (!id) return;
+            const ok = window.confirm("鍒犻櫎杩欐潯鐣欒█鍚楋紵");
+            if (!ok) return;
+            try {
+              await apiFetch(`/rest/v1/comments?id=eq.${id}`, {
+                method: "PATCH",
+                body: { comment_type: "guestbook_archived" },
+                auth: true
+              });
+              unmarkHiddenIds([id]);
+              statusEl.textContent = "";
+              await loadNotes();
+            } catch (err) {
+              markHiddenIds([id]);
+              statusEl.textContent = "宸蹭粠澧欓潰闅愯棌锛堟秷鎭繚鐣欙級";
+              await loadNotes();
+              return;
+              statusEl.textContent = `鍒犻櫎澶辫触锛?{err.message}`;
+            }
+          });
+        });
+      }
+    }
+
+    async function loadNotes() {
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        const hidden = loadHiddenIds();
+        notesCache = loadLocalNotes().filter((item) => !hidden.has(String(item.id)));
+        renderNotes(notesCache);
+        return;
+      }
+
+      await ensureGuestbookArticle();
+      if (!guestbookArticleId) {
+        const hidden = loadHiddenIds();
+        notesCache = loadLocalNotes().filter((item) => !hidden.has(String(item.id)));
+        renderNotes(notesCache);
+        return;
+      }
+
+      try {
+        const data = await apiFetch(
+          `/rest/v1/comments?select=*&article_id=eq.${guestbookArticleId}&comment_type=eq.guestbook&order=created_at.asc`
+        );
+        const hidden = loadHiddenIds();
+        notesCache = (Array.isArray(data) ? data : []).filter((item) => !hidden.has(String(item.id)));
+        renderNotes(notesCache);
+      } catch {
+        const hidden = loadHiddenIds();
+        notesCache = loadLocalNotes().filter((item) => !hidden.has(String(item.id)));
+        renderNotes(notesCache);
+      }
+    }
+
+    function startPlaceMode() {
+      const authorValue = nameInput.value.trim();
+      const content = messageInput.value.trim();
+      if (!content) return;
+
+      const author = authorValue || "Anonymous";
+      if (authorValue) saveName(authorValue);
+
+      pendingNote = { author, content };
+      wall.classList.add("is-placing");
+      createGhostIfNeeded();
+      statusEl.textContent = "璇峰湪涓嬫柟鐣欒█鏉跨偣鍑绘姇鏀句綅缃€?;
+    }
+
+    async function placePendingNote(clientX, clientY) {
+      if (!pendingNote) return;
+      const ghost = createGhostIfNeeded();
+      const noteWidth = ghost ? (ghost.offsetWidth || 220) : 220;
+      const noteHeight = ghost ? (ghost.offsetHeight || 120) : 120;
+      const p = placeByCenter(clientX, clientY, noteWidth, noteHeight);
+      const metrics = wallMetrics();
+      const meta = {
+        x: Number(((p.x / metrics.width) * 100).toFixed(2)),
+        y: Number(((p.y / metrics.height) * 100).toFixed(2)),
+        z: Date.now()
+      };
+
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        const notes = loadLocalNotes();
+        notes.push({
+          id: `local-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          author: pendingNote.author,
+          content: pendingNote.content,
+          created_at: new Date().toISOString(),
+          comment_type: "guestbook",
+          selection_text: JSON.stringify(meta)
+        });
+        saveLocalNotes(notes);
+        notesCache = notes;
+        renderNotes(notesCache);
+        pendingNote = null;
+        removeGhost();
+        wall.classList.remove("is-placing");
+        messageInput.value = "";
+        statusEl.textContent = "宸叉斁缃€?;
+        return;
+      }
+
+      try {
+        await ensureGuestbookArticle();
+        if (!guestbookArticleId) {
+          throw new Error("鐣欒█澧欐湭鍒濆鍖?);
+        }
+        await apiFetch(`/rest/v1/comments`, {
+          method: "POST",
+          body: {
+            article_id: guestbookArticleId,
+            author: pendingNote.author,
+            content: pendingNote.content,
+            comment_type: "guestbook",
+            selection_text: JSON.stringify(meta)
+          },
+          auth: false
+        });
+      } catch (err) {
+        statusEl.textContent = `鎻愪氦澶辫触锛?{err.message}`;
+        pendingNote = null;
+        removeGhost();
+        wall.classList.remove("is-placing");
+        return;
+      }
+
+      pendingNote = null;
+      removeGhost();
+      wall.classList.remove("is-placing");
+      messageInput.value = "";
+      statusEl.textContent = "宸叉斁缃€?;
+      await loadNotes();
+    }
+
+    async function clearAllNotes() {
+      if (!isAdmin) {
+        statusEl.textContent = "浠呯鐞嗗憳鍙竻绌恒€?;
+        return;
+      }
+      const ok = window.confirm("纭娓呯┖鐣欒█澧欏叏閮ㄤ究鍒╄创锛?);
+      if (!ok) return;
+
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        saveLocalNotes([]);
+        notesCache = [];
+        renderNotes(notesCache);
+        statusEl.textContent = "宸叉竻绌恒€?;
+        return;
+      }
+
+      try {
+        await ensureGuestbookArticle();
+        if (!guestbookArticleId) throw new Error("鐣欒█澧欐湭鍒濆鍖?);
+        await apiFetch(
+          `/rest/v1/comments?article_id=eq.${guestbookArticleId}&comment_type=eq.guestbook`,
+          {
+            method: "PATCH",
+            auth: true,
+            body: { comment_type: "guestbook_archived" }
+          }
+        );
+        statusEl.textContent = "宸叉竻绌恒€?;
+        await loadNotes();
+      } catch (err) {
+        statusEl.textContent = `娓呯┖澶辫触锛?{err.message}`;
+      }
+    }
+
+    const savedName = loadSavedName();
+    if (savedName) nameInput.value = savedName;
+
+    nameInput.addEventListener("input", (event) => {
+      const value = event.target.value.trim();
+      if (value) saveName(value);
+    });
+
+    submitButton.addEventListener("click", startPlaceMode);
+    clearAllButton.addEventListener("click", clearAllNotes);
+
+    wall.addEventListener("mousemove", (event) => {
+      if (!pendingNote) return;
+      updateGhost(event.clientX, event.clientY);
+    });
+
+    wall.addEventListener("click", (event) => {
+      if (!pendingNote) return;
+      placePendingNote(event.clientX, event.clientY);
+    });
+
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !pendingNote) return;
+      pendingNote = null;
+      removeGhost();
+      wall.classList.remove("is-placing");
+      statusEl.textContent = "";
+    });
+
+    window.addEventListener("resize", () => {
+      if (pendingNote && ghostNoteEl) {
+        const rect = wall.getBoundingClientRect();
+        updateGhost(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      }
+      if (notesCache.length) {
+        renderNotes(notesCache);
+      }
+    });
+
+    window.addEventListener("focus", () => {
+      checkAdmin();
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) checkAdmin();
+    });
+
+    window.addEventListener("storage", (event) => {
+      if (event.key === SESSION_KEY) checkAdmin();
+    });
+
+    (async () => {
+      await checkAdmin();
+      await loadNotes();
+    })();
+  </script>
+</body>
+</html>
+

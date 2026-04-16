@@ -1,0 +1,933 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lakis' ROOM - 发布</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero-min">
+      <h1 class="hero-min__title">发布</h1>
+      <a class="back-home" href="./index.html?skipGate=1">返回主页</a>
+    </header>
+
+    <section class="settings">
+      <div class="settings__card">
+        <div class="settings__title">分类管理</div>
+        <div class="publish-scope">
+          <label class="publish-scope__item">
+            <input type="radio" name="scope" value="交通" checked>
+            交通
+          </label>
+          <label class="publish-scope__item">
+            <input type="radio" name="scope" value="清水">
+            清水
+          </label>
+        </div>
+        <div class="settings__status">发布时会按上方分类进入对应板块。</div>
+      </div>
+
+      <div class="settings__card">
+        <div class="settings__title">文章发布</div>
+        <form id="publishForm" class="form-block">
+          <input id="title" type="text" placeholder="标题">
+          <input id="tags" type="text" placeholder="标签（空格分隔，可多个）">
+          <textarea id="summary" rows="3" placeholder="简介"></textarea>
+          <div class="publish-scope">
+            <label class="publish-scope__item">
+              <input type="radio" name="visibility" value="public" checked>
+              公开
+            </label>
+            <label class="publish-scope__item">
+              <input type="radio" name="visibility" value="private">
+              私密（仅管理员可见）
+            </label>
+          </div>
+
+          <label class="chapter-toggle">
+            <input id="chapterMode" type="checkbox">
+            多章节编辑
+          </label>
+
+          <div id="chapterTools" class="chapter-editor hidden">
+            <div class="settings__actions">
+              <input id="chapterCount" type="number" min="1" max="100" value="1" style="max-width:140px;" placeholder="章节数">
+              <button id="applyChapterCount" class="button button--ghost" type="button">设置章节数</button>
+              <button id="addChapter" class="button button--ghost" type="button">+ 添加章节</button>
+            </div>
+            <div id="chapterList" class="chapter-editor__panel"></div>
+          </div>
+
+          <textarea id="content" rows="12" placeholder="正文（段落之间空一行）"></textarea>
+
+          <div class="settings__actions">
+            <button id="submit" class="button button--solid" type="submit">发布</button>
+            <button id="cancelEdit" class="button button--ghost hidden" type="button">取消编辑</button>
+            <button id="indentFormat" class="button button--ghost" type="button">排版（每段缩进两字符）</button>
+          </div>
+          <div id="publishStatus" class="settings__status"></div>
+
+          <div class="bulk-import">
+            <div class="settings__title">批量导入（顺序逐篇编辑）</div>
+            <input
+              id="bulkFiles"
+              type="file"
+              multiple
+              accept=".txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            >
+            <div class="settings__actions">
+              <button id="bulkParse" class="button button--ghost" type="button">读取文件</button>
+              <button id="queueDoneNext" class="button button--solid" type="button" disabled>当前完成，切到下一篇</button>
+              <button id="queueClear" class="button button--ghost" type="button" disabled>清空队列</button>
+            </div>
+            <div id="bulkStatus" class="settings__status"></div>
+            <div id="bulkPreview" class="published-list"></div>
+          </div>
+        </form>
+      </div>
+
+      <div class="settings__card">
+        <div class="settings__title">已发布文章</div>
+        <div class="settings__actions">
+          <button id="reloadArticles" class="button button--ghost" type="button">刷新列表</button>
+        </div>
+        <div class="publish-scope">
+          <label class="publish-scope__item">
+            <input type="radio" name="publishedScope" value="all" checked>
+            全部
+          </label>
+          <label class="publish-scope__item">
+            <input type="radio" name="publishedScope" value="交通">
+            交通
+          </label>
+          <label class="publish-scope__item">
+            <input type="radio" name="publishedScope" value="清水">
+            清水
+          </label>
+        </div>
+        <input id="publishedSearch" type="search" placeholder="搜索已发布文章">
+        <div id="publishedList" class="published-list"></div>
+      </div>
+    </section>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    window.__mammothLoader = (() => {
+      const LOCAL_SRC = "./mammoth.browser.min.js";
+      const CDN_SRC = "https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js";
+      let loadingPromise = null;
+
+      function hasMammoth() {
+        return Boolean(window.mammoth && typeof window.mammoth.extractRawText === "function");
+      }
+
+      function inject(src) {
+        return new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = src;
+          script.async = true;
+          script.onload = () => resolve(true);
+          script.onerror = () => reject(new Error(`load failed: ${src}`));
+          document.head.appendChild(script);
+        });
+      }
+
+      async function ensure() {
+        if (hasMammoth()) return true;
+        if (loadingPromise) return loadingPromise;
+        loadingPromise = (async () => {
+          try { await inject(LOCAL_SRC); } catch {}
+          if (hasMammoth()) return true;
+          try { await inject(CDN_SRC); } catch {}
+          return hasMammoth();
+        })();
+        return loadingPromise;
+      }
+
+      return { ensure, localSrc: LOCAL_SRC, cdnSrc: CDN_SRC };
+    })();
+  </script>
+  <script>
+    const SUPABASE_URL = window.SUPABASE_URL;
+    const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
+    const SESSION_KEY = "lakis_room_session";
+
+    const publishForm = document.getElementById("publishForm");
+    const titleInput = document.getElementById("title");
+    const tagsInput = document.getElementById("tags");
+    const summaryInput = document.getElementById("summary");
+    const contentInput = document.getElementById("content");
+    const submitButton = document.getElementById("submit");
+    const cancelEditButton = document.getElementById("cancelEdit");
+    const indentFormatButton = document.getElementById("indentFormat");
+    const publishStatus = document.getElementById("publishStatus");
+
+    const chapterMode = document.getElementById("chapterMode");
+    const chapterTools = document.getElementById("chapterTools");
+    const chapterCountInput = document.getElementById("chapterCount");
+    const applyChapterCountButton = document.getElementById("applyChapterCount");
+    const addChapterButton = document.getElementById("addChapter");
+    const chapterList = document.getElementById("chapterList");
+
+    const bulkFilesInput = document.getElementById("bulkFiles");
+    const bulkParseButton = document.getElementById("bulkParse");
+    const queueDoneNextButton = document.getElementById("queueDoneNext");
+    const queueClearButton = document.getElementById("queueClear");
+    const bulkStatus = document.getElementById("bulkStatus");
+    const bulkPreview = document.getElementById("bulkPreview");
+
+    const publishedList = document.getElementById("publishedList");
+    const reloadArticles = document.getElementById("reloadArticles");
+    const publishedSearch = document.getElementById("publishedSearch");
+
+    let canPublish = false;
+    let editingArticleId = null;
+    let publishedArticlesCache = [];
+    let queueDrafts = [];
+    let queueCursor = -1;
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function normalizeText(value) {
+      return String(value || "").trim().toLowerCase();
+    }
+
+    function getScope() {
+      const selected = document.querySelector('input[name="scope"]:checked');
+      return selected ? selected.value : "交通";
+    }
+
+    function getVisibility() {
+      const selected = document.querySelector('input[name="visibility"]:checked');
+      return selected && selected.value === "private" ? "private" : "public";
+    }
+
+    function setVisibility(value) {
+      const next = value === "private" ? "private" : "public";
+      const node = document.querySelector(`input[name="visibility"][value="${next}"]`);
+      if (node) node.checked = true;
+    }
+
+    function getSession() {
+      try {
+        const raw = localStorage.getItem(SESSION_KEY);
+        if (!raw) return null;
+        const session = JSON.parse(raw);
+        if (!session || !session.access_token || !session.expires_at) return null;
+        if (Date.now() / 1000 > session.expires_at) return null;
+        return session;
+      } catch {
+        return null;
+      }
+    }
+
+    async function apiFetch(path, { method = "GET", body, auth = false } = {}) {
+      const headers = { apikey: SUPABASE_ANON_KEY };
+      const session = getSession();
+      if (auth && session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+      if (body) headers["Content-Type"] = "application/json";
+
+      const res = await fetch(`${SUPABASE_URL}${path}`, {
+        method,
+        cache: "no-store",
+        headers,
+        body: body ? JSON.stringify(body) : undefined
+      });
+      const text = await res.text();
+      let data;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+      if (!res.ok) {
+        const message = typeof data === "object" && data?.message ? data.message : (res.statusText || "Request failed");
+        throw new Error(message);
+      }
+      return data;
+    }
+
+    async function checkAdmin() {
+      const session = getSession();
+      if (!session?.user?.email) return false;
+      try {
+        const data = await apiFetch(
+          `/rest/v1/admins?select=email&email=eq.${encodeURIComponent(session.user.email)}&limit=1`,
+          { auth: true }
+        );
+        return Array.isArray(data) && data.length > 0;
+      } catch {
+        return false;
+      }
+    }
+
+        function isChapterHeading(text) {
+      const t = String(text || "").trim();
+      if (!t) return false;
+      if (/^第[一二三四五六七八九十百千万零〇两0-9]+章(?:\s+.*)?$/.test(t)) return true;
+      if (/^[一二三四五六七八九十百千万零〇两0-9]+[、．.]\s*.+$/.test(t)) return true;
+      if (/^[（(][一二三四五六七八九十百千万零〇两0-9]+[)）]\s*.+$/.test(t)) return true;
+      if (/^chapter\s+[0-9ivxlcdm]+(?:\s*[:\-]?\s*.*)?$/i.test(t)) return true;
+      return false;
+    }
+
+    function normalizeChapterHeading(text) {
+      const t = String(text || "").trim().replace(/\s+/g, " ");
+      if (!t) return "";
+      if (/^第[一二三四五六七八九十百千万零〇两0-9]+章/.test(t)) return t;
+      const s1 = t.match(/^([一二三四五六七八九十百千万零〇两0-9]+)[、．.]\s*(.*)$/);
+      if (s1) return `第${s1[1]}章${s1[2] ? ` ${s1[2]}` : ""}`;
+      const s2 = t.match(/^[（(]([一二三四五六七八九十百千万零〇两0-9]+)[)）]\s*(.*)$/);
+      if (s2) return `第${s2[1]}章${s2[2] ? ` ${s2[2]}` : ""}`;
+      const s3 = t.match(/^chapter\s+([0-9ivxlcdm]+)(?:\s*[:\-]?\s*(.*))?$/i);
+      if (s3) return `Chapter ${s3[1]}${s3[2] ? ` ${s3[2]}` : ""}`;
+      return t;
+    }
+
+    function isChapterHeadingSmart(text, { isFirstLine = false } = {}) {
+      const t = String(text || "").trim();
+      if (!t) return false;
+      const compactLen = t.replace(/\s+/g, "").length;
+      if (compactLen > 36) return false;
+      if (/[。！？；;!?]$/.test(t)) return false;
+      if (/^第[一二三四五六七八九十百千万零〇两0-9]+章(?:\s+.*)?$/.test(t)) return true;
+      if (/^chapter\s+[0-9ivxlcdm]+(?:\s*[:\-]?\s*.*)?$/i.test(t)) return true;
+      if (isFirstLine) return false;
+      if (/^[一二三四五六七八九十百千万零〇两0-9]+[、．.]\s*.+$/.test(t)) return true;
+      if (/^[（(][一二三四五六七八九十百千万零〇两0-9]+[)）]\s*.+$/.test(t)) return true;
+      return false;
+    }
+
+    function splitChapters(rawText) {
+      const raw = String(rawText || "").trim();
+      if (!raw) return { explicit: false, chapters: [] };
+      const lines = raw.split(/\r?\n/);
+      const trimmedLines = lines.map((line) => line.trim());
+      const firstNonEmptyIndex = trimmedLines.findIndex(Boolean);
+      const headingCount = trimmedLines.reduce((count, line, idx) => {
+        return isChapterHeadingSmart(line, { isFirstLine: idx === firstNonEmptyIndex }) ? count + 1 : count;
+      }, 0);
+      if (headingCount < 2) {
+        return { explicit: false, chapters: [{ title: "", content: raw }] };
+      }
+
+      const chapters = [];
+      let current = { title: "", content: [] };
+      let explicit = false;
+
+      function pushCurrent() {
+        if (!current.title && !current.content.length) return;
+        chapters.push({
+          title: current.title || `第${chapters.length + 1}章`,
+          content: current.content.join("\n").trim()
+        });
+      }
+
+      lines.forEach((line, idx) => {
+        const t = line.trim();
+        if (isChapterHeadingSmart(t, { isFirstLine: idx === firstNonEmptyIndex })) {
+          explicit = true;
+          pushCurrent();
+          current = { title: normalizeChapterHeading(t), content: [] };
+          return;
+        }
+        if (!t) {
+          if (current.content.length && current.content[current.content.length - 1] !== "") current.content.push("");
+          return;
+        }
+        current.content.push(line);
+      });
+      pushCurrent();
+
+      if (!explicit) {
+        return { explicit: false, chapters: [{ title: "", content: raw }] };
+      }
+
+      return { explicit: true, chapters };
+    }
+    function buildContentFromChapters() {
+      const items = Array.from(chapterList.querySelectorAll(".chapter-item"));
+      const blocks = items.map((item, index) => {
+        const title = item.querySelector(".chapter-item__title").value.trim() || `第${index + 1}章`;
+        const body = item.querySelector("textarea").value.trim();
+        if (!title && !body) return "";
+        return `${title}\n\n${body}`.trim();
+      }).filter(Boolean);
+      return blocks.join("\n\n");
+    }
+
+    function createChapterItem(title = "", content = "") {
+      const item = document.createElement("div");
+      item.className = "chapter-item";
+      item.innerHTML = `
+        <div class="chapter-item__row">
+          <input class="chapter-item__title" type="text" placeholder="章节标题" value="${escapeHtml(title)}">
+          <button class="chapter-remove" type="button">删除</button>
+        </div>
+        <textarea rows="6" placeholder="本章正文">${escapeHtml(content)}</textarea>
+      `;
+      item.querySelector(".chapter-remove").addEventListener("click", () => {
+        const all = chapterList.querySelectorAll(".chapter-item");
+        if (all.length <= 1) {
+          const titleEl = item.querySelector(".chapter-item__title");
+          const bodyEl = item.querySelector("textarea");
+          if (titleEl) titleEl.value = "";
+          if (bodyEl) bodyEl.value = "";
+          syncChapterCount();
+          return;
+        }
+        item.remove();
+        syncChapterCount();
+      });
+      chapterList.appendChild(item);
+      syncChapterCount();
+    }
+
+    function syncChapterCount() {
+      chapterCountInput.value = String(Math.max(1, chapterList.querySelectorAll(".chapter-item").length));
+    }
+
+    function setChapterCount(count) {
+      const n = Math.max(1, Math.min(100, Number(count) || 1));
+      const current = Array.from(chapterList.querySelectorAll(".chapter-item"));
+      if (current.length < n) {
+        for (let i = current.length; i < n; i += 1) createChapterItem(`第${i + 1}章`, "");
+      } else if (current.length > n) {
+        for (let i = current.length - 1; i >= n; i -= 1) current[i].remove();
+      }
+      syncChapterCount();
+    }
+
+    function setChapterMode(enabled) {
+      chapterMode.checked = enabled;
+      chapterTools.classList.toggle("hidden", !enabled);
+      contentInput.classList.toggle("hidden", enabled);
+      if (enabled && !chapterList.querySelector(".chapter-item")) createChapterItem("第一章", "");
+      syncChapterCount();
+    }
+
+    function fillEditorFromDraft(draft) {
+      titleInput.value = draft.title || "";
+      summaryInput.value = draft.summary || "";
+      if (draft.hasChapters && Array.isArray(draft.chapters) && draft.chapters.length) {
+        setChapterMode(true);
+        chapterList.innerHTML = "";
+        draft.chapters.forEach((ch, idx) => {
+          createChapterItem(ch.title || `第${idx + 1}章`, ch.content || "");
+        });
+      } else {
+        setChapterMode(false);
+        contentInput.value = draft.content || "";
+      }
+    }
+
+    function clearEditorKeepTagsAndScope() {
+      titleInput.value = "";
+      summaryInput.value = "";
+      contentInput.value = "";
+      chapterList.innerHTML = "";
+      setChapterMode(false);
+      setVisibility("public");
+    }
+
+    function normalizeImportedText(text) {
+      return String(text || "")
+        .replace(/\r\n/g, "\n")
+        .replace(/\u0000/g, "")
+        .split("\n")
+        .map((line) => line.replace(/\s+$/g, ""))
+        .join("\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    }
+
+    function stripExt(name) {
+      return String(name || "").replace(/\.[^/.]+$/, "");
+    }
+
+    function autoSummary(content) {
+      const blocks = String(content || "")
+        .split(/\n\s*\n/g)
+        .map((block) => block.replace(/\s+/g, " ").trim())
+        .filter((block) => block && !isChapterHeading(block));
+      return blocks.length ? blocks[0].slice(0, 120) : "";
+    }
+
+    function getCommonTags() {
+      return tagsInput.value
+        .split(/[\s,，、]+/)
+        .map((tag) => tag.trim())
+        .filter(Boolean);
+    }
+
+    function renderQueuePreview() {
+      if (!queueDrafts.length) {
+        bulkPreview.innerHTML = '<div class="empty-state">暂无待编辑文章</div>';
+        queueDoneNextButton.disabled = true;
+        queueClearButton.disabled = true;
+        return;
+      }
+      queueDoneNextButton.disabled = false;
+      queueClearButton.disabled = false;
+      bulkPreview.innerHTML = queueDrafts.map((draft, index) => {
+        const active = index === queueCursor ? "is-active" : "";
+        const stateText = draft.done ? "已完成" : (index === queueCursor ? "当前编辑" : "待编辑");
+        const summaryLine = draft.summary
+          ? `<span>${escapeHtml(draft.summary)}</span>`
+          : `<span></span>`;
+        return `
+          <div class="published-item ${active}">
+            <div class="published-item__meta">
+              <span class="published-item__title">${escapeHtml(draft.title)}</span>
+              <div class="published-item__right">
+                <span>${escapeHtml((draft.ext || "").toUpperCase())}</span>
+                <span>${draft.hasChapters ? `多章节 ${draft.chapters.length}` : "单篇"}</span>
+              </div>
+            </div>
+            <div class="published-item__meta">
+              ${summaryLine}
+              <span>${stateText}</span>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function moveToQueue(index) {
+      if (index < 0 || index >= queueDrafts.length) return;
+      queueCursor = index;
+      fillEditorFromDraft(queueDrafts[index]);
+      renderQueuePreview();
+      bulkStatus.textContent = `当前：第 ${queueCursor + 1}/${queueDrafts.length} 篇`;
+    }
+
+    function finishCurrentAndNext() {
+      if (!queueDrafts.length || queueCursor < 0) return;
+      queueDrafts[queueCursor].done = true;
+      if (queueCursor >= queueDrafts.length - 1) {
+        bulkStatus.textContent = "队列处理完成。";
+        clearEditorKeepTagsAndScope();
+        renderQueuePreview();
+        return;
+      }
+      moveToQueue(queueCursor + 1);
+    }
+
+    async function parseOneFile(file) {
+      const filename = String(file?.name || "");
+      const ext = filename.toLowerCase().endsWith(".docx") ? "docx" : "txt";
+      let content = "";
+      if (ext === "txt") {
+        content = await file.text();
+      } else {
+        const ready = window.__mammothLoader
+          ? await window.__mammothLoader.ensure()
+          : Boolean(window.mammoth && typeof window.mammoth.extractRawText === "function");
+        if (!ready) {
+          throw new Error("Word 解析器不可用。请把 mammoth.browser.min.js 放到网站目录，或先导入 TXT");
+        }
+        const buffer = await file.arrayBuffer();
+        const result = await window.mammoth.extractRawText({ arrayBuffer: buffer });
+        content = result?.value || "";
+      }
+
+      const normalized = normalizeImportedText(content);
+      if (!normalized) throw new Error("文件内容为空");
+      const parsed = splitChapters(normalized);
+      return {
+        title: stripExt(filename) || `未命名_${Date.now()}`,
+        summary: "",
+        content: normalized,
+        hasChapters: parsed.explicit,
+        chapters: parsed.chapters,
+        ext,
+        done: false
+      };
+    }
+
+    async function parseBulkFiles() {
+      if (!bulkFilesInput.files || !bulkFilesInput.files.length) {
+        bulkStatus.textContent = "请先选择文件";
+        return;
+      }
+      bulkStatus.textContent = "正在读取文件...";
+      const files = Array.from(bulkFilesInput.files);
+      const drafts = [];
+      const failures = [];
+      for (const file of files) {
+        try {
+          const draft = await parseOneFile(file);
+          drafts.push(draft);
+        } catch (err) {
+          failures.push(`${file.name}：${err?.message || "读取失败"}`);
+        }
+      }
+      const previousCount = queueDrafts.length;
+      queueDrafts = queueDrafts.concat(drafts);
+      if (queueCursor < 0 && queueDrafts.length) {
+        queueCursor = 0;
+      }
+      renderQueuePreview();
+      if (previousCount === 0 && queueCursor >= 0) fillEditorFromDraft(queueDrafts[queueCursor]);
+      const failed = failures.length;
+      const success = drafts.length;
+      const summary = failed
+        ? `读取完成：成功 ${success}，失败 ${failed}`
+        : `读取完成：新增 ${success} 篇`;
+      const brief = failures.slice(0, 2).join("；");
+      bulkStatus.textContent = brief
+        ? `${summary}。${brief}${failures.length > 2 ? " …" : ""}`
+        : summary;
+      bulkFilesInput.value = "";
+    }
+
+    function clearQueue() {
+      queueDrafts = [];
+      queueCursor = -1;
+      renderQueuePreview();
+      bulkStatus.textContent = "队列已清空。";
+    }
+
+    function setEditing(article) {
+      editingArticleId = article.id;
+      titleInput.value = article.title || "";
+      tagsInput.value = Array.isArray(article.tags) ? article.tags.join(" ") : "";
+      summaryInput.value = article.summary || "";
+      setVisibility(article.is_private ? "private" : "public");
+
+      const raw = String(article.content || "");
+      const parsed = splitChapters(raw);
+      if (parsed.explicit) {
+        setChapterMode(true);
+        chapterList.innerHTML = "";
+        parsed.chapters.forEach((ch, i) => createChapterItem(ch.title || `第${i + 1}章`, ch.content || ""));
+      } else {
+        setChapterMode(false);
+        contentInput.value = raw;
+      }
+
+      submitButton.textContent = "更新";
+      cancelEditButton.classList.remove("hidden");
+      publishStatus.textContent = `正在编辑：${article.title || ""}`;
+      const radio = document.querySelector(`input[name="scope"][value="${article.category || ""}"]`);
+      if (radio) radio.checked = true;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function clearEditing() {
+      editingArticleId = null;
+      submitButton.textContent = "发布";
+      cancelEditButton.classList.add("hidden");
+      clearEditorKeepTagsAndScope();
+    }
+
+    function renderPublishedArticles(items) {
+      if (!items.length) {
+        publishedList.innerHTML = '<div class="empty-state">暂无文章</div>';
+        return;
+      }
+
+      publishedList.innerHTML = items.map((item) => {
+        const date = String(item.created_at || "").slice(0, 10);
+        const readHref = `./read.html?id=${encodeURIComponent(item.id)}&back=${encodeURIComponent("publish.html")}`;
+        const actions = canPublish ? `
+          <div class="published-item__actions">
+            <button class="button button--ghost published-export" data-id="${item.id}" type="button">导出TXT</button>
+            <button class="button button--ghost published-edit" data-id="${item.id}" type="button">编辑</button>
+            <button class="button button--ghost published-delete" data-id="${item.id}" type="button">删除</button>
+          </div>
+        ` : "";
+        return `
+          <div class="published-item">
+            <div class="published-item__meta">
+              <a class="published-item__title" href="${readHref}">${escapeHtml(item.title || "未命名")}</a>
+              <div class="published-item__right">
+                <span>${escapeHtml(date)}</span>
+                ${actions}
+              </div>
+            </div>
+            <div class="published-item__meta">
+              <span>分类：${escapeHtml(item.category || "")}${item.is_private ? " ｜ 私密" : " ｜ 公开"}</span>
+              <span></span>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      publishedList.querySelectorAll(".published-edit").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const id = button.getAttribute("data-id");
+          if (!id) return;
+          try {
+            const rows = await apiFetch(`/rest/v1/articles?select=*&id=eq.${id}&limit=1`, { auth: true });
+            if (!Array.isArray(rows) || !rows[0]) return;
+            setEditing(rows[0]);
+          } catch (err) {
+            publishStatus.textContent = `读取失败：${err.message}`;
+          }
+        });
+      });
+
+      publishedList.querySelectorAll(".published-export").forEach((button) => {
+        button.addEventListener("click", () => {
+          const id = button.getAttribute("data-id");
+          const article = items.find((it) => String(it.id) === String(id));
+          if (!article) return;
+          const raw = String(article.content || "");
+          const safeName = String(article.title || "article").replace(/[\\/:*?"<>|]/g, "_").trim() || "article";
+          const blob = new Blob(["\uFEFF" + raw], { type: "text/plain;charset=utf-8" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${safeName}.txt`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        });
+      });
+
+      publishedList.querySelectorAll(".published-delete").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const id = button.getAttribute("data-id");
+          if (!id) return;
+          const ok = window.confirm("确定删除这篇文章吗？");
+          if (!ok) return;
+          try {
+            await apiFetch(`/rest/v1/articles?id=eq.${id}`, { method: "DELETE", auth: true });
+            if (String(editingArticleId) === String(id)) clearEditing();
+            await loadPublishedArticles();
+          } catch (err) {
+            publishStatus.textContent = `删除失败：${err.message}`;
+          }
+        });
+      });
+    }
+
+    function getFilteredPublishedArticles() {
+      const selectedScope = document.querySelector('input[name="publishedScope"]:checked');
+      const scope = selectedScope ? selectedScope.value : "all";
+      const keyword = normalizeText(publishedSearch.value);
+      const scoped = publishedArticlesCache.filter((item) => {
+        const cat = String(item.category || "").trim();
+        if (cat !== "交通" && cat !== "清水") return false;
+        return scope === "all" ? true : cat === scope;
+      });
+      if (!keyword) return scoped;
+      return scoped.filter((item) => {
+        const tagsText = Array.isArray(item.tags) ? item.tags.join(" ") : "";
+        const raw = [item.title, item.category, item.summary, tagsText, item.content].join(" ");
+        return normalizeText(raw).includes(keyword);
+      });
+    }
+
+    function renderPublishedListBySearch() {
+      renderPublishedArticles(getFilteredPublishedArticles());
+    }
+
+    async function loadPublishedArticles() {
+      let rows = [];
+      let authError = null;
+      if (canPublish) {
+        try {
+          const adminRows = await apiFetch(`/rest/v1/articles?select=id,title,category,tags,summary,content,created_at,is_private&order=created_at.desc`, { auth: true });
+          rows = Array.isArray(adminRows) ? adminRows : [];
+        } catch (err) {
+          try {
+            const adminRowsFallback = await apiFetch(`/rest/v1/articles?select=id,title,category,tags,summary,content,created_at&order=created_at.desc`, { auth: true });
+            rows = Array.isArray(adminRowsFallback) ? adminRowsFallback : [];
+          } catch {
+            authError = err;
+          }
+        }
+      }
+      if (!rows.length) {
+        try {
+          const publicRows = await apiFetch(`/rest/v1/articles?select=id,title,category,tags,summary,content,created_at,is_private&or=(is_private.is.null,is_private.eq.false)&order=created_at.desc`, { auth: false });
+          rows = Array.isArray(publicRows) ? publicRows : [];
+        } catch (err) {
+          if (!authError) authError = err;
+          try {
+            const fallbackRows = await apiFetch(`/rest/v1/articles?select=id,title,category,tags,summary,content,created_at&order=created_at.desc`, { auth: false });
+            rows = Array.isArray(fallbackRows) ? fallbackRows : [];
+          } catch {}
+        }
+      }
+      publishedArticlesCache = rows;
+      renderPublishedListBySearch();
+      if (!rows.length && authError) publishStatus.textContent = `列表读取异常：${authError.message || "未知错误"}`;
+    }
+
+    async function initPageAuth() {
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        canPublish = false;
+        submitButton.disabled = true;
+        publishStatus.textContent = "当前未配置 Supabase。";
+        await loadPublishedArticles();
+        return;
+      }
+      const session = getSession();
+      const loggedIn = Boolean(session?.access_token);
+      const admin = loggedIn ? await checkAdmin() : false;
+      canPublish = Boolean(admin);
+      submitButton.disabled = !admin;
+      if (!loggedIn) publishStatus.textContent = "请先在设置页登录管理员账号。";
+      else if (!admin) publishStatus.textContent = "当前账号不是管理员。";
+      else publishStatus.textContent = "";
+      await loadPublishedArticles();
+      renderQueuePreview();
+    }
+
+    function applyIndentToText(raw) {
+      const paragraphs = String(raw || "")
+        .replace(/\r\n/g, "\n")
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => `　　${line.replace(/^　　/, "")}`);
+      return paragraphs.join("\n\n");
+    }
+
+    cancelEditButton.addEventListener("click", () => {
+      clearEditing();
+      publishStatus.textContent = "";
+    });
+
+    reloadArticles.addEventListener("click", async () => {
+      await loadPublishedArticles();
+    });
+
+    publishedSearch.addEventListener("input", renderPublishedListBySearch);
+    document.querySelectorAll('input[name="publishedScope"]').forEach((radio) => {
+      radio.addEventListener("change", renderPublishedListBySearch);
+    });
+
+    chapterMode.addEventListener("change", (e) => {
+      setChapterMode(e.target.checked);
+    });
+
+    applyChapterCountButton.addEventListener("click", () => {
+      setChapterMode(true);
+      setChapterCount(chapterCountInput.value);
+    });
+
+    chapterCountInput.addEventListener("change", () => {
+      setChapterMode(true);
+      setChapterCount(chapterCountInput.value);
+    });
+    chapterCountInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      setChapterMode(true);
+      setChapterCount(chapterCountInput.value);
+    });
+
+    addChapterButton.addEventListener("click", () => {
+      setChapterMode(true);
+      createChapterItem(`第${chapterList.querySelectorAll(".chapter-item").length + 1}章`, "");
+    });
+
+    indentFormatButton.addEventListener("click", () => {
+      if (chapterMode.checked) {
+        chapterList.querySelectorAll(".chapter-item textarea").forEach((ta) => {
+          ta.value = applyIndentToText(ta.value);
+        });
+      } else {
+        contentInput.value = applyIndentToText(contentInput.value);
+      }
+    });
+
+    bulkParseButton.addEventListener("click", parseBulkFiles);
+    queueDoneNextButton.addEventListener("click", finishCurrentAndNext);
+    queueClearButton.addEventListener("click", clearQueue);
+
+    publishForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      publishStatus.textContent = "";
+
+      const title = titleInput.value.trim();
+      const summary = summaryInput.value.trim();
+      const tags = getCommonTags();
+      if (chapterMode.checked) syncChapterCount();
+      const content = chapterMode.checked ? buildContentFromChapters() : contentInput.value.trim();
+      const category = getScope();
+      const visibility = getVisibility();
+      const is_private = visibility === "private";
+
+      if (!title || !content) return;
+      if (!canPublish) {
+        publishStatus.textContent = "没有发布权限，请先登录管理员。";
+        return;
+      }
+
+      publishStatus.textContent = editingArticleId ? "更新中..." : "发布中...";
+      try {
+        if (editingArticleId) {
+          try {
+            await apiFetch(`/rest/v1/articles?id=eq.${editingArticleId}`, {
+              method: "PATCH",
+              auth: true,
+              body: { title, category, tags, summary, content, is_private }
+            });
+          } catch (err) {
+            const msg = String(err?.message || "");
+            if (!msg.includes("is_private")) throw err;
+            await apiFetch(`/rest/v1/articles?id=eq.${editingArticleId}`, {
+              method: "PATCH",
+              auth: true,
+              body: { title, category, tags, summary, content }
+            });
+          }
+        } else {
+          try {
+            await apiFetch(`/rest/v1/articles`, {
+              method: "POST",
+              auth: true,
+              body: { title, category, tags, summary, content, is_private }
+            });
+          } catch (err) {
+            const msg = String(err?.message || "");
+            if (!msg.includes("is_private")) throw err;
+            await apiFetch(`/rest/v1/articles`, {
+              method: "POST",
+              auth: true,
+              body: { title, category, tags, summary, content }
+            });
+          }
+        }
+      } catch (err) {
+        publishStatus.textContent = `操作失败：${err.message}`;
+        return;
+      }
+
+      publishStatus.textContent = editingArticleId ? "已更新。" : "已发布。";
+      tagsInput.value = "";
+      const queueActive = queueCursor >= 0 && queueCursor < queueDrafts.length;
+      if (!editingArticleId && queueActive) {
+        finishCurrentAndNext();
+      } else {
+        clearEditing();
+      }
+      await loadPublishedArticles();
+    });
+
+    initPageAuth();
+    if (window.__mammothLoader) {
+      window.__mammothLoader.ensure().catch(() => {});
+    }
+  </script>
+</body>
+</html>
+
+
+

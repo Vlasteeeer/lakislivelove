@@ -1,0 +1,866 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>小雀停在刀锋上</title>
+  <style>
+    :root {
+      --bg: #e9f4ea;
+      --paper: #f7fbf4;
+      --text: #17301b;
+      --muted: #3b5640;
+      --line: rgba(23,48,27,0.18);
+      --accent: #0f2514;
+      --shadow: 0 18px 48px rgba(15,37,20,0.08);
+    }
+    * { box-sizing: border-box; }
+    .hidden { display: none !important; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 8% 4%, rgba(18,60,26,0.10), transparent 35%),
+        radial-gradient(circle at 90% 12%, rgba(18,60,26,0.08), transparent 30%),
+        radial-gradient(circle at 12% 85%, rgba(18,60,26,0.06), transparent 30%),
+        linear-gradient(180deg, #f3f9f2 0%, var(--bg) 100%);
+    }
+    .wrap {
+      width: min(860px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0 40px;
+    }
+    .paper {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      padding: 28px;
+      box-shadow: var(--shadow);
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .back {
+      text-decoration: none;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 10px 16px;
+      background: #fff;
+    }
+    h1, h2 {
+      font-family: "STSong", "SimSun", "Songti SC", serif;
+      margin: 0;
+    }
+    h1 {
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      margin-bottom: 10px;
+    }
+    h2 {
+      margin-top: 0;
+      margin-bottom: 16px;
+      font-size: 1.55rem;
+      color: var(--accent);
+      font-family: "KaiTi", "Kaiti SC", "STKaiti", serif;
+    }
+    .chapter {
+      display: none;
+    }
+    .chapter.is-active {
+      display: block;
+    }
+    .chapter p:last-child {
+      margin-bottom: 0;
+    }
+    .chapter-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 24px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+    }
+    .chapter-nav__info {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .chapter-button {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      border-radius: 999px;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+    .chapter-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .chapter-comments {
+      margin-top: 24px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+    }
+    .chapter-comments__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .chapter-comments__list {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .chapter-comment {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px 14px;
+      background: rgba(255, 255, 255, 0.7);
+    }
+    .chapter-comment__meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .chapter-comment__selection {
+      font-size: 0.9rem;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    .chapter-comment__content {
+      margin: 0;
+      font-size: 1.05rem;
+      line-height: 1.8;
+      text-indent: 0;
+      font-family: "STSong", "Songti SC", "SimSun", serif;
+    }
+    .chapter-comments__form {
+      display: grid;
+      gap: 10px;
+    }
+    .chapter-comments__form input,
+    .chapter-comments__form textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 10px 12px;
+      font-size: 1rem;
+      font-family: "STSong", "Songti SC", "SimSun", serif;
+      background: #fff;
+      color: var(--text);
+    }
+    .chapter-comments__form button {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 10px 18px;
+      background: var(--text);
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.95rem;
+      justify-self: start;
+    }
+    .selection-popover {
+      position: fixed;
+      max-width: 320px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      box-shadow: var(--shadow);
+      z-index: 3000;
+    }
+    .selection-popover__preview {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin: 0 0 8px;
+    }
+    .selection-popover__form {
+      display: grid;
+      gap: 8px;
+    }
+    .selection-popover__form input,
+    .selection-popover__form textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 8px 10px;
+      font-size: 0.9rem;
+      font-family: "STSong", "Songti SC", "SimSun", serif;
+    }
+    .selection-popover__form button {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 14px;
+      background: var(--text);
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.8rem;
+    }
+    .intro {
+      margin: 0 0 24px;
+      color: var(--muted);
+      line-height: 1.9;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    p {
+      margin: 0 0 16px;
+      line-height: 1.95;
+      font-size: 1.3rem;
+      font-weight: 400;
+      font-family: "STSong", "Songti SC", "SimSun", serif;
+      text-indent: 2em;
+    }
+    @media (max-width: 640px) {
+      .paper { padding: 18px; border-radius: 22px; }
+      .topbar { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <a id="readBack" class="back" href="./traffic.html">返回文章列表</a>
+    </div>
+    <article class="paper">
+      <h1>小雀停在刀锋上</h1>
+      <p class="intro"></p>
+      <section class="chapter" data-chapter="1">
+        <h2>第一章 渴望温暖的人</h2>
+        <p>那天我走在街上，下了大雨，我的衣服湿透了，兜里还剩最后几个铜币。我在逃难，因为饥饿浑身冰凉，被一棒子敲晕了，倒在路边。</p>
+        <p>我以为我要死了。其实那个年代、那些地方，要让人死很容易，战火纷飞，继而山河破碎、饿殍遍地。可我不想死。</p>
+        <p>醒过来时我已身无分文，我浑身发抖，挣扎着爬起来。我的脑子因高烧而混沌，记忆也有些空白，不住地咳嗽、打喷嚏。这里看起来还算繁华，可远处是一栋刚被炸毁的楼。我知道我不能在那里待下去。</p>
+        <p>我就是在这时候遇到他的。他很高、穿着军装，长发。在逐渐昏暗的天色里我看他身后跟着的队伍和他手里举起的枪，他盯着我看了好一会儿，我站住脚步，咬着嘴唇，在哗啦啦的雨声里又打了一个喷嚏。</p>
+        <p>他一直沉默，最后放下了枪，朝我走来。我下意识想逃，不住后退，可是无能为力，还在雨里跌坐了下去。他迈步追上我，单膝蹲在我面前，并抓住了我的手腕。雨水从他的帽檐上落下来，划过他锋利的鼻梁和下巴，最终落到我的脸上。我勉强在雨幕里看他，听到一些金属碰撞的响声。</p>
+        <p>“名字。”他这样说，我皱皱眉没有答话，想试着挣脱开被桎梏的手。他没有得到答案，看上去不很满意，便用手枪抵着我的下巴让我看他。</p>
+        <p>“说话，哑巴？”</p>
+        <p>我的名字算不上秘密，肯定不是，它无关痛痒，此刻隐藏它说不准还会丢了命。于是我依照记忆，实话实说：“丹恒。”他闻言没什么表情，只是用枪摩挲着我，继而转到我的脸上再拍了两下，才把这个冰凉的东西收了回去。“要吃饭就跟我走。”</p>
+        <p>我担心他带走我是别有用心——我听说过的，有些军队里有供军人玩乐的男人和女人，他们用身体服侍他人，很年轻就染了病，然后被丢出来自生自灭。可我没有别的选择。</p>
+        <p>那天他先带我去了洗澡的地方。我洗干净，出来又套上我湿漉漉的脏衣服。他在门口等我，也换了身衣服。看见我时他几乎微不可查地皱了皱眉头，然后他带我回了卧房，给我丢过来一套干净的，让我换上。</p>
+        <p>他就坐在椅子上，抱着手臂，看起来不打算走。我不敢换，就拿着衣服跟他对视。我问他，就在这儿吗？他恶趣味地扬起嘴角——摘下帽子的脸更有攻击性，在灯光下我甚至能看清他眼下一道浅浅的疤——他好整以暇，好似我露出更多无措便更能使他愉悦，我听见他说：“是，我看着你。”</p>
+        <p>羞耻心作祟，我的脸开始涨红，很快地回复说我不换了。他就再次皱起眉，冷声问我：“你想冻死吗？”</p>
+        <p>他似乎有点累了，换了个姿势坐着，用手肘撑住桌子，捏了捏鼻梁，告诉我说如果我想死，大可以现在就走回去——淋雨的地方。</p>
+        <p>我咬住嘴唇。其实我也不大清楚我在思考什么，可能我已经有些意识不清，我依然浑身发冷，我不知道思考是否有用，不知道跟他之间是否能有回旋的余地，又或者我很清楚我只是在白白地拉扯时长。</p>
+        <p>最终是他先一步做出动作。他突然站起来，板凳和桌子发出巨大的吱呀声。“行了，我不看。”他这样说，随手拿起放在桌上的帽子，没有回头地往外走去，说他今晚还有事，让我换好衣服就去床上休息。</p>
+        <p>我听到皮鞋踏在地板上的声响，听它们渐行渐远，依然不能完全放下心来。真的走了吗？我将信将疑，担心那扇门还会被突然推开。但我太冷了，于是我还是哆哆嗦嗦地脱下了湿衣服，换上干净的。</p>
+        <p>他让我睡床铺，我不太敢。他看起来因为面色过分沉静，反而使我疑心他其实喜怒无常。那张床看起来很干净、很软和，但我身上还有没擦干的水渍，以及我对他而言不清不楚的身份。他随口的一句话可能会在第二天要我的命，如果他突然反悔的话。于是我走到床边，只把被子抱了下来，裹住自己，在床边缩着睡了过去。</p>
+        <p>我记不清上一次这样熟睡是什么时候了，我记得我家族的争吵和战争几乎是同时到来的。他们认为我脆弱无用，难成大业。他们丢下了我，炮火又吞噬了他们。</p>
+        <p>我之后才知道，他——这个把我带回来的人，因长期失眠，在卧房里也点了安神的香。香气充满了我的鼻腔，安心的气味使我想到记忆深处，很小的时候，我母亲带我到后山上看的那些花。</p>
+        <p>那晚他是后半夜回来的，把我抱到床上。我被惊醒了，很惊恐地看着他，卷着被子后退。我害怕他现在就要对我做些什么，但他似乎不关心我的动作，只是就我睡地板的行为问我：“不想睡床？”</p>
+        <p>我想摇头，可还没作出反应，他就伸手要来掀我的被子，我便继续后退，他仿佛觉得好笑，直起身，拉了拉手套，对我说：“害怕什么，反正迟早会有那么一天的。”</p>
+        <p>我不接话，觉得恼怒，可他似乎会被我的所有反抗取悦，和我对视，片刻后扬起嘴角喊了我的名字，丹恒。</p>
+        <p>他很忙，白天几乎不在，只是派人守着我。他的佣人每天来给我送饭，给我送新的衣服，照顾我的一日三餐。他们告诉我该怎样在大宅子里生活，但不和我闲聊。而他半夜回来，带着我不喜欢的硝烟味道，在床旁脱掉外套，掀开被子直接躺进来。我总是往床内靠，想给他留出位置，也想离他远些。有时候他安分地睡在床沿，有时候把我拉进怀里，却只是抱着。</p>
+        <p>更少的时候他可能会把手伸进衣服里捏几下，低声评价说我没那么瘦了或者有点肉了，我不知道他这样说是因为什么。</p>
+        <p>他的手很大，有老茧，两只手好像能握住我整个腰，我毫不怀疑他如果愿意可以把它捏碎。每次他摸上来时我都觉得紧张，五感好像都放大，让我清晰地听到他在我耳边的呼吸、他身上的气味和肌肤相贴时我的颤栗。</p>
+        <p>但他的手只在腹部停留，好像目的只是为了取暖，没有大事。我总是试图把自己蜷缩成一团，在他怀里降低些存在感。可是他的怀抱又太温暖，胜过我身上的被子和身下的褥子，也胜过外面的雨和泥。</p>
+        <p>后来他告诉我，每次他早晨醒来都要花一番功夫，才能把他自己从我无意识的扒拉里解救出来。而我称自己睡得太熟了，对此并不知情。</p>
+        <p>在外面看守的人不会进来，我无事可做，只能在他的房间里找找能消遣的东西。他有一书柜书，我就把它们一本本拿下来，翻开，看到喜欢的就坐在那里看一天，再把书放回去。</p>
+        <p>我以为自己伪装得很好，甚至还吹干净了那些书上的飞灰，但殊不知那些恰好暴露了我。他默不作声地观察了几天，没头没尾地问我说，你是不是更喜欢看文学书？</p>
+        <p>他的书架上文学类的比较少，还有一些关于武器制造的，我看不太懂，翻翻就放回去了。我从那些书的扉页上看到了他的名字，还有他的长辈给他的寄语，以及他自己的批注。我发现他的字迹很遒劲，甚至还会在旁边说“错误方法”，顺便加个叹号。</p>
+        <p>或许是那些东西给了我勇气，使我认为他并非全然是一个可怖的人，于是我只是愣了几秒，随后大着胆子点了点头。</p>
+        <p>他——他的名字叫刃——从那以后就会派人给我送一些报纸、杂志，以及不知从哪里买来的旧书，有时候摞成一捆，有时候是几个单本。</p>
+        <p>我恍惚觉得日子就要继续这样下去，在这个几乎可以不见天日的安全屋内，无论是战火还是死亡都似乎离我很远。直到有天晚上，他带着一身铺天盖地的血腥味坐在了屋内的木桌前。我被此惊醒，看到烛光下他身上破碎的衣料，它们连带着肉一起被他撕下来，露出背上触目惊心的伤痕。他沉默着给自己缠上绷带，始终背对着我，除了沉重一些的呼吸外，没有说话。</p>
+        <p>我见过不少那种伤，他们出现在流民、士兵的身上，很快压垮他们，让他们变成路边的尸骸。我很害怕他也会变成那样，我问他，你为什么受了这么重的伤？为什么不处理？</p>
+        <p>他偏过头回答我：“医生还没到。”</p>
+        <p>我们沉默，继而他仿佛想到什么很好笑的事，闷笑出声，片刻后问我：“你是在关心我吗？”他说，“我把你养在家里等我上，你是在关心我吗？”</p>
+        <p>我一时不知道该怎么接话，或许是被他的下流话耻到，只是咬着嘴唇。最后我对他说：“我也可以随时走。”</p>
+        <p>他站起身朝我走来，在背后的烛火映照下，我看到他的脸半明半暗，高挺的鼻梁像一把快要劈开我的尖刀。他抿着嘴唇靠近我，跪上床榻：“去哪儿？等着被别人捡走、被别人上吗？”</p>
+        <p>他身上有我从未闻到过的复杂的气味，在昏暗的、视觉无法完全起效的环境里几乎占据了我的全部感官，烧焦的皮革、血、刺鼻的消毒水、硝烟，它们混在一起，凝聚在他伸过来的手上。他抚上我的脸，问：“会吗？”</p>
+        <p>我不知道他指的是什么，只是茫然地、急促地呼吸，抬起头看他，摇头。他就轻声笑了，倚靠在床头，拉着我的手放在他的皮带上，在我颈边说，那这次就放过你，用手吧。</p>
+        <p>我记得我睁大眼，想后退，又被他轻松拦住。我问他：“你不是受伤了吗？”</p>
+        <p>他嗯了声，把手伸进我的衣服里，像平时那样揉捏我的侧腰，咬我的耳垂，对我说：“是。不然就上你了。”</p>
+      </section>
+
+      <section class="chapter" data-chapter="2">
+        <h2>第二章 到底是怎样的离别</h2>
+        <p>刃和被他带回家的青年丹恒会在家里做爱。</p>
+        <p>性事通常是由刃主导的，这显而易见。但只用彼此的手和嘴疏解，还没有更进一步。</p>
+        <p>他们的第一次在那个刃受伤后的夜晚，疼痛使刃眼眶发热，在他心里的是一股近乎破坏的激情和冲动，他眼前闪过焦黑的战场，他喜欢丹恒那双眼睛，他也恨不得立刻就将性器塞进青年的嘴唇。</p>
+        <p>可他到底还是没有那样做，在短暂的交谈后，他捏着青年的手，套弄自己发烫的性器，在交融的呼吸里抬着丹恒的脸接吻。身上的痛被快感逐渐麻痹，他们唇齿交合，含不住的涎水从青年下巴上不停地掉下去。丹恒浑身都在发烫，窒息感和铁锈味让他翻着眼流眼泪。</p>
+        <p>丹恒疑心自己要死了，他好像在这个气味里短暂离开了他以为的、安全的床榻，他在恐慌里啜泣，近乎虚脱，往前一扑伏在床头，大口大口地呼吸。刃也深呼吸了几下，才拍拍他的腰，起身，把身上简单地处理过后，很快就又回来，把他从床上捞起来。</p>
+        <p>他用香膏帮青年打开了后穴，把还带着皮质手套的手指伸进去，很快找到了敏感点。丹恒起初挣扎得很厉害，刃就拍他的脸让他安静，进而将另一只手伸进他的嘴里。</p>
+        <p>“含好了。”男人这样说。丹恒于是开始舔咬他的手指，他撑在青年脸颊上的手摸到不断增多的液体，却没有听见明显的哭声。他加快了手上的动作，让后穴也开始流水，青年的前端高高地立起来，很快射在他自己的小腹上。</p>
+        <p>他问丹恒为什么不哭出来。</p>
+        <p>他其实看不太清丹恒的神情，烛火快要被从窗户刮进来的风吹熄，那一晚的月亮也不太亮。于是刃凑近他，用唇走过丹恒湿润的脸，舌头舔过的位置都是咸咸的眼泪，他听见丹恒用还在发抖的声音轻轻说，你伤得很严重。</p>
+        <p>刃愣住，偏头看见青年半合的眼和颤抖的睫毛，他几乎是落荒而逃。那天晚上，他吩咐旁人给丹恒送去换洗的衣服和热水，最后也没有回房间。</p>
+        <p>那次后青年对他的态度依旧如常，就好像这个插曲从不曾发生过。他依然给他送去他想要看的书和报纸，安排好他的生活，依然在某些晚上钻进床铺，抱紧他。</p>
+        <p>丹恒看起来没有生气，没有因他那晚的不告而别而产生芥蒂，甚至没有问他为什么。他还会在他抱紧他时转过身，告诉他说，刃，今晚你需要吗？</p>
+        <p>刃握住他的手制止他，而丹恒摇摇头，对他说，没关系，我是自愿的。</p>
+        <p>他分不清这是不是真话。</p>
+        <p>稚嫩的青年——哪里都稚嫩，他没有一点经验，像开在凌晨的花，身上全是没干的露水。他稍微一碰就流眼泪，轻轻一揉就流水，用本该捏笔的手解开他的裤带，将它握住，套弄，之后是舔、吞吃，抬起眼来看他，脸贴在他紧绷的小腹。他从那双和他对视的眼睛里看见晶莹的眼泪，但眼泪里没有悲伤或者哀切。</p>
+        <p>他还是喜欢他的眼睛，可是又害怕看见那双眼睛，于是他把他脸朝下摁在床铺里，把他的腰臀抬起来，捏住他的后颈，伏在他身上玩弄他的后穴。青年总是发抖，身体夸张地溢出汗水，肩骨耸起，身下的床单被自己渗出的水液、眼泪和唾液沾湿一大片，被翻过来时能看见脸上很久都消不掉的红晕和仍然上翻的眼睛。</p>
+        <p>刃也不敢问他喜不喜欢。这似乎是一种强迫和默认，被迫的服从，无论答案是什么，结果都是一样的。单方面的发泄无法被反抗，刃想，就像他一开始说过的那样，或许他这就是他把他捡回来的目的，没有别的。</p>
+        <p>有时候刃会闲下来，回家时站在房门口。丹恒看见了，就喊他进来。青年在看书，刃给他买了太多，他一时间看不完。他又让他给自己买了笔墨，偶尔还会写点东西。刃坐在一旁看着他写。</p>
+        <p>他们不说话，偶尔说也只是一两句。夜晚的事情是一种心照不宣，刃惊讶于他的好脾气，他们面对面这样坐着，好像是认识了许多年的友人。</p>
+        <p>丹恒还照着一些小书，给他用纸折过一些小玩意。青年手巧，折出来栩栩如生，连他都自愧弗如。他把东西交到他手里，问他好看吗，他说好看，丹恒就低着头笑一下。那些日子正好是初秋，院子里有一棵落叶的树，他们隔着窗子看那些金黄的叶子往下落，他捡了几片回来，给丹恒做书签。</p>
+        <p>后来的某天，事情发生得太快了，他根本来不及反应。他还在外面作战，忽然听有人来报，说他的房子也被攻击了。</p>
+        <p>他没有办法回去，只能继续，血、夕阳，半边通红的天，灰蒙蒙的地面。终于结束了，他拖着身体往回赶，几乎没有思考，只是身体反应。为什么要这么久，他从马上跨下来，院子里横七竖八地倒着人，他听见自己在大声喊他的名字，但没有人回答他。于是他哑着嗓子，觉得自己的声音怪异得可怕，他吩咐下属分头防守，清理残军，一定要找到。</p>
+        <p>他无法接受那双绿眼睛会就此闭上，怎么会那样？</p>
+        <p>房内没有人，床上整齐地叠着被子，桌上还摆着一本没看完的书，旁边是他做的那枚书签，门口是一大摊鲜血。他快要停住呼吸，大脑尖锐地刺痛起来。丹恒？他大声喊。怎么会这样？他想。昨天，明明昨天……</p>
+        <p>过了不知多久——或许只是片刻，他的身体在过量的情绪里僵直，浑身冰凉，感受不到时间流逝——他忽然听到那个熟悉的声音在叫他的名字，于是他立刻转身，看到那个身影站在走廊尽头，身上是大片的血迹，手上拿着他曾经交给他的一把匕首。</p>
+        <p>那把匕首——有天他们像疯了一般地做爱，刃的性器磨破了他的腿根，丹恒哭了出来，于是他从外套里摸出匕首，递给他，说，你杀了我吧，如果你真的这么恨我。丹恒只是摇着头，哭着把匕首丢到了床下，后来又被刃捡起来，让他收好，如果他有一天还是想杀了他的话。</p>
+        <p>他的视线失焦再聚焦，看见青年小心翼翼地朝他走来，又叫了他一声。“刃？”丹恒这样说，“你…你还好吗？”</p>
+        <p>他不知道自己露出了什么表情，是不是吓到了他，他冲过去，一把将他搂进怀里，青年吓得举远了匕首。刃说不出话，只是收紧手臂，触摸他的体温，还活着、还活着，太好了。</p>
+        <p>“有人攻击了这里，”丹恒说，“安全了吗？”</p>
+        <p>安全了。他说，安全了，丹恒。</p>
+        <p>丹恒把他的脑袋抱在怀里，他把他摁在床榻上，天色逐渐暗了下来。可以吗？他问，可以吗？丹恒？他从来没有在床上问过这样的问题，这才是第一次，他掀起青年的衣服，吸吮他的双乳，丹恒在他的舔吻里流泪，可以，他回答，可以。</p>
+        <p>他像一只幼犬，丹恒的乳房是他的养料，他靠它获得养分、不知餍足。他在上面疯狂地留下痕迹，直到丹恒轻声哭泣，他问他，疼吗？</p>
+        <p>刃知道丹恒会回答什么。不疼。他肯定会这样说——果然，丹恒只是抱紧了他，摇头，避开了他身上受伤的地方。丹恒今天受伤不重，只是有些淤青，刃不想看见它们，只是拿嘴唇摩挲，舔咬，闷哼从青年的胸腔发出来，他松开牙齿。“丹恒。”他叫他，没什么目的，只是唤回他的注意力，“丹恒。”</p>
+        <p>丹恒的眼睛水盈盈的，在夜色里反射出仅有的光线，好像一轮月亮。他凑上去和他接吻，丹恒捧住他的脸，刃的手加快了速度，直到丹恒射在他们之间，肚腹、胸口，甚至还有自己的下巴。</p>
+        <p>他的东西对丹恒来说或许实在是太大了，进去时青年近乎昏厥，额头上冷汗涔涔，手指在刃的手臂上抓出血痕。但他依然咬紧了嘴唇，不发一言，脆弱的脖颈高高仰起，月白的玉。他主动来向刃索吻，把闷哼和呻吟都堵在彼此口中，舌尖来回翻卷，在刃终于一捅到底时，丹恒猛地挺身抵上了刃的身体，接着又重重摔下床铺，浑身痉挛着颤抖，水液从后穴流出，又被尽数堵了回去。</p>
+        <p>青年小腹酸胀，陌生的快感和痛感在撕裂他的神经，他一面在挣扎一面在迎合，被那柄凶器肢解。可他无处可去，只得将刃当成自己的浮萍才能浮上水面，他呜咽着搂住男人的肩膀，将脸也埋了进去。</p>
+        <p>频率很快，男人的腰精壮有力，鼠蹊部在动作中不断撞上他的大腿根，融化的错觉，他像正在燃烧的蜡烛，刃是点燃他、炙烤他的火焰。</p>
+        <p>丹恒的小腹被顶出了很明显的痕迹，被男人摁下去，便很快发着抖从前端也流出水液。他觉得自己好像坏掉了，在和男人的交合里竟迫切地想要被填满、被占有，于是他学着，像之前一样捧起男人握住他手腕的另一只手，把那些指节一个个含进嘴里，甚至放任他们压住自己的唇舌，像另一个穴口。</p>
+        <p>刃又把丹恒翻了过去，丹恒勉力撑起手臂，他或许想要逃走，但无处可去——一直如此，他再次被压在身下，腰贴近床面，臀部却高高地抬起来，他仰起头偏过脸去和刃接吻。外面的月亮似乎破开了云层，刃感受到那种柔和清冷的光线笼罩住了他们，像一层轻柔的纱。</p>
+        <p>雨夜那晚，雨最后停了吗，有月亮吗？刃想，他不太记得了。</p>
+        <p>丹恒在激烈的性事中逐渐神志不清，他在拥抱里勉强用双腿勾住了刃的腰，展开身体任那些亲吻和啃咬像雨点一样落在自己身上。他浑身湿透，却并不感到寒冷。他想，没有关系。</p>
+        <p>他快要晕过去了，过量的快感灌入他的身体，他承受不住，又哭又叫，直到力气散尽。他迷迷糊糊地，在睡梦里暂时丧失了五感，因此也并不知道，性事的最后，刃咬着他的耳朵，流着眼泪对他说，离开我吧，丹恒。</p>
+      </section>
+
+      <section class="chapter" data-chapter="3">
+        <h2>第三章 倦鸟难归</h2>
+        <p>●</p>
+        <p>黑发的青年在战争全面爆发前曾是小村庄的老师，写得一手好钢笔字，戴着黑框眼镜，春夏喜欢穿一件宽松的、洗的发白的蓝色衬衫，长得很清秀。他总是独来独往，似乎没什么交心朋友，但性格很好。</p>
+        <p>村庄里的孩子，无论是否足够听话，往往都能在毕业前得到他的亲笔信——那并非什么值钱的东西，但村庄里没有第二个人能写出来。他的钢笔字娟秀、但力透纸背。他引经据典，诗词歌赋信手拈来，小孩子们崇拜他，就围在他身边，丹恒老师，丹恒老师。</p>
+        <p>他还拿钱，赶集时去镇子里给大家买东西，带村子里的人去。大家问他的钱从哪来，他也不回答。他说他一个人用钱少，还是要大家一起吃饱饭。</p>
+        <p>丹恒老师——那年刚满二十四岁，没有成家，家里只摆着和另一个男人的合照。去做客的人们看见了，也没有问起过他们的关系。兄弟，再不济朋友，或是曾经一起念书的同学。丹恒老师的关系网简单得要命，一只手都数得过来，还能是谁？</p>
+        <p>照片里的男人一头长发，穿着军装，没看镜头，垂眼看着丹恒，看着有点冷漠，但嘴角是挂着笑的。丹恒被他揽在怀里，对着镜头外扬起嘴唇，两个人凑得很近。</p>
+        <p>丹恒老师每月有两天的假期，多数时间会陪着父老乡亲，但有半天时间会闭门谢客，一般在上午。下午的时候，丹恒老师会进城一趟，他要专门去镇子里的邮政代办点，寄花更多钱的挂号信。</p>
+        <p>代办点设在药铺，药铺的主人眼熟那个单薄瘦弱的漂亮青年，他总是挎着帆布包，拿出一个包好的信封，买了最大最漂亮的邮票。“贵？嗯，没关系的。”丹恒这样对他说，“我希望他能收到。”</p>
+        <p>那些日子，丹恒老师寄出去很多信，也收到了很多信。厚厚的信封像鸟雀一样从那些地方飞进来。邮差到了，他总是亲自去取，给专门跑到村子里来的邮差更多小费。偶尔有疏漏，小孩子们就热心地帮忙拿到学校，再帮他把钱给出去。小孩子们说，丹恒老师，你的信到了！</p>
+        <p>他红着脸接过去，很快装进包里。</p>
+        <p>寄信人的名字是单名，叫刃。地址不太固定，哪里的都有。寄信的是不是爱人啊？他们猜，没成家的丹恒老师，有个远方的、总是在奔波的爱人。</p>
+        <p>他的爱人是什么样？众说纷纭，要温柔、要漂亮、要体贴，奔波千里，是做什么的？丹恒听着这些，呆呆地摇头，好像都…或许有些能对上，他最多只是笑，暗暗地比对，又想半天，后笑得别过脸去。饱读诗书的丹恒老师到最后也没有说出任何冗长的形容，他很好，他只是这样说。</p>
+        <p>人们厌恶战争，厌恶鲜血、厌恶枪炮、坦克，厌恶侵犯故乡的陌生人。但它停不下来，像蝗虫席卷。丹恒老师不喜欢提起战争，又不得不提起战争，每每说起，总是面色苍白。</p>
+        <p>丹恒老师经历过战争吗？</p>
+        <p>不，我没有。他说，把一些话很拼命地吞咽下去，我只是听说过。</p>
+        <p>没有人问过丹恒为什么来这里，这个小村庄常年没有外人进来，也没人出去。在过去他们说不上富足，但也能勉强自给自足地吃饱饭。丹恒是突然来的，有一天他就出现在了村庄里，问大家缺不缺老师，他可以负责教学。正巧老教师太年迈了，于是丹恒很顺利地留了下来。丹恒老师是个外人，他们听不出他来自哪里，在一众父老乡亲里很突出，但没有人不喜欢他。丹恒和他们已经全然变成了一家人。</p>
+        <p>经历过饥荒天灾之年的地界，熬过苦难，人们依然在和老天叫板，靠着勤劳维持基本的温饱。但小村庄在炮火下显得更脆弱，那是和人斗争，哪怕它曾经春秋冬夏都热热闹闹的，变成废墟也只是一夜的事。</p>
+        <p>炮弹落下来，很快就有些人死了，残肢断臂留在路上，血像暗红色的油漆。硝烟吹散了哭嚎和尖叫，居民们只顾着四散奔逃，他们很恐慌，他们开始收拾，他们要沿着山到路一直跑，到另一个地方去避难。</p>
+        <p>邮差小哥顶着炮火，最后一次给丹恒送信。那封信被揉得皱巴巴的，好像寄来就这样了。邮差顺口说，你和你爱人还没见上面啊？再不见面，在这世道，可就见不着了。</p>
+        <p>丹恒接过去，拿手指摸索了一下粗糙的信封表面，没有说话。</p>
+        <p>大部队起动那天，大多数人没有看见那个单薄的身影，唯一一个看见丹恒老师的似乎是一位赶羊的大娘，她在队伍行进后一个人回来赶她落下的羊群。她说，那天她一边甩着鞭子一边喊他，丹恒老师，快走了！</p>
+        <p>而那个青年抓着布包，戴着帽子。他的房子被前天的炮弹炸塌了一半，他扒拉开房板，木着双眼，手里拿着一叠焦黑的废纸，一个看不出形状的木框。他看着大娘，张了张嘴，没发出声音，最终只是冲大娘挥了挥手，扔掉了手里的所有东西，转身跑向了后方来支援的军队。</p>
+        <p>●</p>
+        <p>/丹恒：</p>
+        <p>不知道是否有机会再见面，战事越来越近了。</p>
+        <p>收到的你的信我都好好保存起来了，我知道有很多都掉了，没有能拿到，有些时候两封信前言不搭后语。我总是很心痒，想知道你还说了些什么。我身边有一个很年轻的小士兵受了重伤，没办法上战场了，我就让他带着大部分信回了家，告诉他如果我牺牲了，请他把那些信烧掉，再埋进土里。丹恒，每次收到你的信我都很欣喜，我很高兴你是平安的，我希望你一直是平安的。</p>
+        <p>我不喜欢脱离现实的任何幻想，都非常不切实际。但这些难眠的日子我总会想到我们在和平时代共处的情景。可那样的话我们会相遇吗？我不知道。</p>
+        <p>因为担心那曾是你的噩梦，我从来不敢在你面前提起我们初遇的雨夜，你也好像从来没问过我为什么会把你带回来。也许你是害怕听到不好的答案。就像你没有提起过自己的过去一样，我也没有讲过我之前的故事。你大概从我的那些书里摸出了些蛛丝马迹，猜到我并非一开始就决定要做个军人。</p>
+        <p>炮火摧毁了我的家乡，所以我也拿起了枪，战争和死亡接踵而至，它们带走了和我有关的所有人，在极度的悲伤后，我反而变得很漠然。世界几乎都变成了灰白色，包括那天夜晚，你身后的楼也象征着死亡。但你有一双生机勃勃的绿眼睛，让我想到小时候家乡门口树上的小鸟，它们一年四季都在那里。</p>
+        <p>我是个自私的人，我也很恶劣，我想给自己的生活找一点意义。小时候我没有能留住那些小鸟，我偶尔能看见它们的尸体掉落在树下，可能是因为没能学会飞，也有可能环境不再适合它们生存。年幼的我也没有能保护他们的能力。</p>
+        <p>所以现在，我很想留住你。</p>
+        <p>我想把你一直拴在我身边，喜欢你所有表情、神态、动作，尤其是在我身边的时候，那些都是因为我。我逗弄、甚至玩弄你，看着你在我身下哭，又很乖地捏着我的手，问我可不可以不要走。</p>
+        <p>丹恒，我想了太多死，死在什么时候我都没关系，但你总捧着我的脸说好好活下去，我就觉得，那还是暂时不要死了。</p>
+        <p>我总是觉得和你待在一起的时间过得太快，我的感情又日渐膨胀，时间快要盛放不住它们。时间太少了，我们要做的事又太多了。</p>
+        <p>曾经有一段时间——就像你看到的，我受人帮助，在学校学的是武器。我痴迷于此，它能让我心安。但就正如火药，它在和平年代可以用来制作孩子们的玩具，现在却只能夺走人的性命。那把刀是我送给自己的礼物，我告诉自己，上了战场就要把自己当成兵器，我不能为别人流泪，也不需要别人为我流泪。</p>
+        <p>抱歉，讲了很多无关的事。按惯例，我应该写一些最近遇到的有趣的事，讲一讲我的近况。但眼下实在不乐观，所以一时说太多了。那么我们说回来吧。</p>
+        <p>我很好，没有受很多伤，也没有生病。我觉得我是很幸运的，战争不会一直这样幸运，但不要太为我担心。</p>
+        <p>对了，你之前说你的学生喜欢你的钢笔？那你有没有告诉他们是谁送给你的？寄给你的时候你还说那支笔太重了，现在能顺利使用了吗？我相信你。士兵们说总能看见我写信，我说我在写给我的妻子，他们很想见你一面。我就说，等到战争结束吧，我邀请他们来参加我们的婚礼，可以吗？你想穿婚纱吗？</p>
+        <p>不过我先给他们看了你给我夹的书签，很漂亮。我记得以前你做过一些夹在我的书里，但你说它们干了会变脆，所以需要多做备用。那以后每年都做一些。</p>
+        <p>我也很喜欢你的画，是新学的吗？右边那个是我吗？原来在你眼里我是这样。你画的自己好可爱，但我觉得你还是更像一只猫。「涂掉的涂鸦」算了，我不会画猫。你可以教我。</p>
+        <p>你在的地方比我现在偏北，现在应该有点转凉了，记得多添衣服，银票在信封里。我还在路边看到了一朵花，也把它摘下来装进了信封里，但它有点凋谢了，很可惜。</p>
+        <p>我要走了，只能写到这里。希望你能收到这封信。</p>
+        <p>和你在一起的日子都很快乐。丹恒，如果我回不来的话…一定要「记住（涂掉）」「墨迹点」忘记我。你的生活会平静地继续下去。</p>
+        <p>照顾好自己。</p>
+        <p>刃</p>
+        <p>「由于突遇战事，送信人牺牲，此信未能顺利寄出。」/</p>
+      </section>
+
+      <section class="chapter" data-chapter="4">
+        <h2>第四章 是否是结束</h2>
+        <p>我在病床上醒来时，听他们说战争已经要结束了。医院的护士告诉我，我昏迷了超过三天，但体征正常，他们都相信我会醒过来。那些护士脸上都带着喜悦的神色，摘下了白口罩，在我眼前拉开窗帘，很兴奋地讲话。</p>
+        <p>一切都会好起来的！他们这样说。</p>
+        <p>我在床上茫然呆坐，继而说我要出院，我认为我的身体已经好了，不必再占用资源。我不喜欢医院，不喜欢太过刺鼻的消毒水味，那天的的医院没有从前的悲哀，比我去过的所有医院都要快乐。战争即将结束的喜讯交口相传，好日子仿佛就在明天。这很好。我想。</p>
+        <p>战争给我的腿留下了旧伤，我因此拿到了一笔钱，走到临近的车站，买了张车票。车子载着我，在几小时后到了一个小镇。我放空自己，什么也没想。我没有什么行李，孑然一身——如果说之前我还有什么牵挂的话，现在也几乎要没有了。</p>
+        <p>我想起从小村庄离开的前几天，我最后一次收到了他的信，没有什么特别的，揉皱的信纸大概是出于无心的送信者。信里，他用很平淡的、与以往别无二致的口吻告诉我要注意安全、照顾好自己。但我知道我已经等不到他了，他所在的战区沦陷的消息写在了报纸上，而炮火已经燃到了我眼前。</p>
+        <p>我厌恶那些东西，所以我曾告诉我的学生们我没有经历过战争，但其实不是那样。战争带走了我的亲人，哪怕他们之中的好多人并不爱我，我也从此没有了家。现在，战争还要带走他。</p>
+        <p>而那时，恰逢一支军队到了眼前，我便申请加入了，他们接纳了我，但我到底没有实战经验，便让我进了宣传科，也负责一些战地新闻收集工作。我曾借职务之便翻阅过一些名册，试图在里面找到他的名字，无果。我也趁着几乎一切机会向周围人打听他的消息，但从没有人听说过他。战争的节奏太快，大家都太疲惫，我没有再接着问下去了。</p>
+        <p>当年他为了我的安全，派人把我送到了一个离他很远的地方，他说炮弹暂时落不到这里，但他大概知道，我也找不到他。临走前他问我是否可以和他拍一张合照，我答应了下来。我们留下了两张，被他放在两个相框里，我带走了其中一份。</p>
+        <p>那些年我们靠书信往来，这最初也是由他开始的。我以为他把我送走是要为了让我和他断绝关系，也暗自想过他是否是兴趣耗尽，可他很快寄来了银票、衣物，那是第一封信，没有称呼和落款，只是告诉我要保重身体，注意安全。最后说，他想知道我的近况。</p>
+        <p>我很快给他回信，告诉他我一切都好，又说这不公平，我也需要得到他的信息。于是我们开始写信。我记得我在小村庄里的住处，那些平静的日子和我的回忆，我们在相隔千里的地方分享自己片刻的幸福。但它们在战争毁于一旦了。我咬住嘴唇，告诉自己没关系，还会再有的。</p>
+        <p>直到现在，战争结束了。车停了下来，我快被颠得散架，拖着腿在路旁扶着膝盖喘息。这里是个小镇，有我很陌生的建筑和一张张从未见过的脸，这很好，我想，我在这里留了下来。</p>
+        <p>没有办法评价这样的生活好还是不好，我并不是个很难适应的人，在哪里我都能活下来。如果当时没有遇到他，我可能也会有别的生路，这可能是我的另一个故事，但没有如果。有一些羁绊的发生是没有逻辑的，也没有前因后果。那之后我在梦里无数次想起那个雨夜，但每每想起，我的身上都并不是冰凉的雨点，而是与此截然相反的、他带给我的温度。</p>
+        <p>我也开始用自己的办法寻找他，但就如之前一样，没有结果。时间日复一日，我说服自己、就快要说服自己，或者我几乎说服了自己。我试图找到证据来证明他至少活着，但那么多我以为快要摸到的线索总是突然中断，一个人实在太渺小了，他是，我也是。</p>
+        <p>他曾寄给我的信已全部损毁、丢失在战争中，我只留下他的匕首，它也曾在一场战役里救了我一命，我拿它划开了一个敌人的喉咙，他的刀离我的心脏只有咫尺之遥，他的血喷溅到我的脸上。</p>
+        <p>他曾用来给我寄信的那些地址，我把它们写在了我随身携带的笔记本里。我往这些地址寄信。我写给那些地方的邮局，拜托他们帮我找一个叫刃的人，可那些寄出去的信无一例外石沉大海，没有一点回音。</p>
+        <p>有时候我会觉得有一点恍惚。我怀疑我记忆错乱了，我怀疑那些事只是我的一场梦。我只是简单地从家里跑了出来，我不曾遇见过他，那些地址或许都是我教书时从别的地方得来的，他从来没有出现过。战争带给太多人创伤和幻觉，我也是其中一个。</p>
+        <p>我不太想活下去了，可我也不知道如何去死。仿佛还有东西在支撑着我，如果我仍然贪恋黑夜里、梦中的、残留的温度，我就应该继续下去。因此我强迫自己开始了新的工作，重新站上讲台。他们仍然称呼我为“丹恒老师”。</p>
+        <p>我是幸运的，镇子里的人们都很朴实，偶尔他们会让我想起之前的小乡村，他们有截然不同又很相似的脸，在看向我时都让我觉得平和。他们不喜欢问我的过去，比较关心我的一日三餐。他们也似乎没有注意到我偶尔有些跛的右腿，只是会告诉我，通往我家的路会慢慢修好，必要时他们可以在上班路上载我一程。</p>
+        <p>学校的孩子们仍然有旺盛的好奇心，但在他们扒拉着我的桌子，问我的信是寄给谁的时候，我已经可以脱口而出，说是给我的爱人。</p>
+        <p>我的爱人。他总是在奔波，以前在，现在也在，我的信只是没办法及时追上他。我宁愿相信如此，相信他的身体、灵魂，只是没有找到栖息之处。</p>
+        <p>时间会在两个极端的情况下近乎停滞，当你在过量的幸福下忘了思考，或者大脑在麻木的平静里疲于运转，我大概是后者。但我依然无法拒绝哪怕是陌生人的善意，在看到张灯结彩的景象时，我才意识到已经又是一个春节了。他们说，丹恒老师，快跟我们一起吧，外面好热闹呢。</p>
+        <p>他们拉着我上了街，递给我一些小吃，外面有些冷，我的学生还给我拿了一条很醒目的红围巾，围得乱七八糟，大概有些滑稽。我久违地、发自内心地笑了笑，接过他们递给我的小吃。小孩子们都穿着很喜庆的红衣服，“丹恒老师，你怎么不穿红色啊？”</p>
+        <p>我有些茫然，结结巴巴地说：“没有专门买过…”</p>
+        <p>突然面对太多的人，我实在有些手足无措，但好在他们及时转移了话题，有人递给我一支毛笔，他们让我给他们写几副春联。</p>
+        <p>可是我好久没写毛笔字了。我说，可能写得不太好。</p>
+        <p>“没关系没关系！”围观的大家说，“我们都不会写，丹恒老师是文化人。更何况不就是图个彩头！”</p>
+        <p>我跟着他们一起笑，提起笔。</p>
+        <p>过了会儿，人群又一次吵闹起来，好像有人在说话，说什么，外面来了个高个子男人，听说我们在写春联，说自己也会写毛笔字，不然就过来一起写吧？</p>
+        <p>“好啊。”我随口道，放下笔，把写好的那张交给旁边的人，抬起眼，“这样还可以多写…”</p>
+        <p>我不记得我看到人群之外的那个人是什么反应了，也许我记得，但那一瞬间的情绪太复杂了，于是我便认为自己忘了。我呆呆地，若不是还有人在问他怎么不过来，只是这样站着，或许我和他还要对望好长一段时间。</p>
+        <p>周围突然在我的世界里安静下来，我的腿最初像灌了铅，很快又似乎轻得像羽毛。我听见我耳边刮过猎猎风声，它们把我的头发、衣服吹起来，把我送到他身边去。我跑过人群，我的腿好疼，我咬着嘴唇忽略了它。路上的小石子绊了我一跤，我险些直接摔在地上，被冲过来的他抱起来。他紧紧地搂住我，深深地呼吸，像之前一样亲吻我的耳朵和侧颈。他身上有一股皂角的气味，手臂依然坚实有力。</p>
+        <p>我们过了很久才分开，在他颤抖的、裹着绷带的手摸上我的面颊时，我才意识到我在哭，哭得沾湿了绷带，哭得说不出一句完整的话。</p>
+        <p>他眼睛也红，但没有落下眼泪。他低头啄吻我的嘴唇，用比以前还沙哑的声音低低地说，丹恒，不要哭了，以后多跟我说话吧，大声一些说。</p>
+        <p>身后有人在叫我，好像是我的学生。他们在我后面起哄，丹恒老师，这就是你的爱人吗？</p>
+        <p>是。我哽咽着，转过脸点点头，我听到他接过我的话头，对他们说：是的，我就是他的丈夫。</p>
+      </section>
+
+      <section class="chapter" data-chapter="5">
+        <h2>第五章 他和他，新生活</h2>
+        <p>●</p>
+        <p>小镇的商贩很早就注意到了他们——一个高大的、沉默得近乎冷漠的男人和他身旁清秀漂亮的青年，那个青年是很早就来了的、小镇上的老师，叫丹恒。他们出来买东西的时间不太固定，不过多是上午，不会太早，而且总一起出来。青年走在前面，那个男人穿着大衣，紧紧地跟在他身旁，偶尔扶住青年的腰或者手臂。</p>
+        <p>今天他们来了自己的摊。商贩远远地瞧见，很快站起身来，问他们要点什么。</p>
+        <p>“一盒雪花膏吧，你的手又裂开了。”青年说，偏过头，似乎是要去问男人的意见。商贩先是下意识主动接过了这个活，而正当他拿着商品准备介绍时，而青年轻声打断了他，很抱歉地说：“这是我的丈夫，他受了伤听不清，您可以跟我说。”</p>
+        <p>男人没什么表情，他的目光甚至没有落到青年手里的东西上，反而只是注视着青年的眼睛和嘴唇。青年很快被看得面色发红，慌张地回头跟商贩说把它包起来，转而又问他，怎么了，是不舒服吗？</p>
+        <p>虽然不太想用这个词形容一个男人，但商贩还是想说——和青年的对视让他脸上流露出近乎乖觉的神情，抬起一只手指了指自己的耳朵，丹恒立刻换了一副神态，刚刚可能有的一点嗔怪都消失不见，凑到男人耳边，“没有听见吗？我再说一遍？”</p>
+        <p>被追问的男人不说话，只是顺势弯下腰把半张脸埋进青年的侧颈和头发里，垂着眼点了点头。这种距离在公共场合已经堪称过分亲密，但青年没有任何不适，他捧着男人的脸蹭了蹭，接过了商贩递给他们的东西，又说：“还要买点别的，家里常备药品告罄了。”</p>
+        <p>他到底听到丹恒说什么了吗？商贩皱着眉，他不这样认为——他听到过一些传闻——好吧，就算没有听到，男人依然和丹恒凑在一起，鼻尖相抵，最后偏过头亲了亲他的嘴唇。旁若无人。商贩心想，恩爱鸳鸯。</p>
+        <p>那些传闻——现在看来并不是传闻，丹恒老师在很早以前就提起过自己有一个爱人的事实。就像所有爱八卦的人一样，商贩也曾歪着脑袋听过那么一耳朵。</p>
+        <p>丹恒老师来小镇的时候孤身一人，清隽、漂亮，但眉宇间总是忧愁的。他买下了一间很小的屋子，并不怎么出门。那时曾遇见并记住了他的人说，除了频繁出入邮局，他总是喜欢在雨天站在屋檐下，手里拿着一把伞，但那把伞从来没有撑开。他会等到雨停再回家，但如果雨一直不停，他也会淋着雨，在天黑之前返回。他们说那时候的丹恒总是浅浅地皱着眉头，不太和人交流，说话时总像在想别的事，总是飘忽。他们除了在必要的对话中得知他的名字，别的并不知情。</p>
+        <p>后来，丹恒换了身衣服，去小镇的学校求职。他的状态似乎好了许多，但仍然没有太多表情。他们从那以后才知道他曾上过战场、也当过老师。学校很快聘用了他。他们说，当他第一次站上讲台，听到下面的学生喊他丹恒老师的时候，他脸上划过迷茫而恍惚的神情。他们猜他是想到了自己的过去。</p>
+        <p>关于他的过去，除了他本人，还有他在很长一段时间都没有出现的爱人。孩子们天真无知，很多在战末出生，并不了解战争的残忍，就算猜得丹恒老师的爱人是一位军人，也依然对他说，那他一定会凯旋的！</p>
+        <p>丹恒老师也总是浅浅地笑着，摸着孩子们的脑袋，回答说，是啊，我也是这样想的。</p>
+        <p>他们都觉得他的爱人不会回来了，被战争吞噬的人不计其数。有些时候人们看见他孤独站着的身影，在许多个起了薄雾的早晨或者燃着晚霞的傍晚，他们或许都对这个青年产生了怜爱之情，他们想告诉他说，不要再等了，何不开始新的生活？可是他们又都说不出口。</p>
+        <p>但他们没有想到，那个人真的回来了。他们说那天丹恒老师笑得很开心，又笑又哭，在他和小镇的人们一起过的第一个新年，在大家费尽心思把很多人敬爱的丹恒老师喊到街上后，有一个男人也出现在了小镇上。丹恒老师越过人群，扑过去抱住了他，那就是他的爱人。</p>
+        <p>男人很高，有一张锋利俊朗的脸，一双多情却冷漠的眼睛，他让丹恒老师多了很多笑容。他们说他的确是位军人，曾经或许还是一个铁匠，手在战争中受了伤，却依然很巧。有时候会一起去邻居家帮一些必要的忙，现在也在镇上的铁匠铺做一些工作。</p>
+        <p>除了手，男人的耳朵似乎也受了伤，听不清大家说话，只有凑到耳边或许才能听明白，但能站到那里的又只有丹恒。于是他总是和丹恒一起出门，在铁匠铺时便一言不发。</p>
+        <p>丹恒老师的爱人是个男人，最初的确几乎出乎了所有人的意料，但大家很快又觉得，这没什么大不了的。没有什么比生死更重，他们现在跨过了生死，什么都不重要了。更要紧的是，他们的确相爱。</p>
+        <p>就像商贩一开始看到的那样，他们总是并肩出现在街上，自如地走在大家的视线里。丹恒老师眉间的忧愁总算散去了，他戴着眼镜，眼镜后的绿眼睛总是亮晶晶的，在看向他的爱人时总是笑盈盈的。男人也一样。</p>
+        <p>据说他们还要筹备婚礼。这句话是男人说的，他们曾停在一家裁缝铺门口，有人听见男人问丹恒，是想在婚礼上穿长裤还是裙子。丹恒不置可否，拉着他很快走开了。裁缝铺老板的儿子是丹恒的学生，老板说，如果丹恒老师要结婚的话，他可以免费给他们定做一套婚装。</p>
+        <p>这就足够了，商贩心想，他也笑起来。小镇上的人都会很幸福，包括他们。</p>
+        <p>●</p>
+        <p>婚纱的事大概还要过上一阵子。小镇上的人逐渐多起来，小孩子也多了，丹恒工作忙，迟迟没有去定制。不过在那之前，他先等到了另一件衣服。</p>
+        <p>那天刃下班回家，路过那家裁缝铺，他的视线被一条旗袍吸引，眼睛一亮，并决定立刻把它买下来。这中途他还回过家，因为他身上并没有足够多的钱。丹恒恰在家中，问他要去做什么，可以一同前去。而刃装作没有听见，匆匆出了门。</p>
+        <p>那是一条经过改良的旗袍，和男人头发的颜色有些类似，布料舒服柔软、紧处收腰，有一条很漂亮的绿色坠子。裁缝铺的老板很得意，他说这是他近期最满意的作品，并介绍了他的的设计理念。这之后男人只是点点头接过旗袍，他才意识到他似乎听不见，颇有些遗憾。</p>
+        <p>“等以后见着丹恒老师，我再跟他说一遍。”老板这样说，目送着男人离开裁缝铺，后知后觉，“旗袍买给谁呢？不会是丹恒老师吧？”</p>
+        <p>他猜中了。但很可惜，作为设计者，他暂时大概也看不到丹恒穿那件旗袍的样子。</p>
+        <p>丹恒声称这是他的底线，旗袍的岔口有些大了，并不适合他穿上街。而他的爱人在他面前举着旗袍，盯着他的嘴唇半晌，才耷拉下眉眼，问，那不可以穿给我看吗？</p>
+        <p>他知道丹恒一定会同意的，事实也是如此。他亲手帮丹恒穿上了旗袍，并系上纽扣。他眼光很好，那件衣服稍微有些大了，但基本算得上合身，完全衬托出丹恒窈窕漂亮的身材，臀丘被勒得微微翘起，腰身仿佛盈盈一握。</p>
+        <p>丹恒被他从身后抱住，他又开始亲吻丹恒的耳朵。这是他们之间的暗语，丹恒轻声反抗，说还没有吃晚饭，不知道刃是否有听见，他只是一直亲他的耳朵，一直到丹恒浑身发软，连声应下。</p>
+        <p>他被男人摁在木桌上，从后面撩开了旗袍。多次交合的身体已经先一步渗出了水液，刃低声笑了笑，又帮他把前面的旗袍也卷起来搭在了桌上——还要穿出门的，丹恒老师。男人这样说，顺势握住了丹恒的性器，手也伸进了后穴。丹恒，你准备过吗？他现在说话黏黏糊糊的，不太清晰，但声音还是很低，丹恒受不了他这样说话，捏着他的手臂反驳：“没有…本来就是这样…”</p>
+        <p>“本来就是？”这句话刃听见了，于是他愉悦地勾起了唇角，更放肆地顺着耳朵、侧脸、一路亲吻到下巴，再是嘴唇，“已经变成这样了吗？”</p>
+        <p>他们之间的性事——就算一起先总是夹杂着复杂的泪和情感，也总是十分契合，更遑论现在。丹恒总羞于承认他对此事的热忱，但身体总是出卖他。熄了灯的夜晚，他趁男人无法看清他的神态，便放任自己沉沦，因快感而流出的、过量的眼泪，他不敢想象他那时是什么模样，不敢想象他若是面对一口铜镜，是否会因自己现在的模样而羞耻。</p>
+        <p>但没关系，没有人能看见。他想，而且他面前是刃。</p>
+        <p>战事在男人的身上留下了或许终身都不能抹去的伤疤，哪怕是现在他也总是缠着绷带，在做爱脱下衣物时也并不能完全取下来。过程里流出的汗液会浸湿他的绷带，他理所当然地要求丹恒帮他更换。而丹恒——如他所愿，总是因此而心疼，他便顺理成章地可以索求更多。</p>
+        <p>丹恒无法继续思考了，男人因他的走神而佯装恼怒，咬了他的下唇，他不得不停下并警告他不可以过分，不然可能会影响他的工作。“工作…”刃暧昧地蹭蹭他的脸，将性器放到他的穴口，“他们都知道我。”</p>
+        <p>那种磨蹭让他发痒，身体不知廉耻、食髓知味，很快流出更多爱液，仿佛是无声的邀请。丹恒向后挺着身体，踮起脚，让整个臀丘贴紧男人训练结实的小腹。他知道那里总会留下水痕，那让他面红耳热。</p>
+        <p>男人很快放了进去，顺利地插到了底，碰到弯折的部分，丹恒发出一些难耐的哼声。“你可以动。”他说，可男人迟迟没有动静，他便不得不回头，重复一遍，“可以了，刃，可以……”</p>
+        <p>他还没有说完，刃便很快捏住了他的腰，随着摇晃腰肢的动作，他不断将整根性器抽出再插入，汗水顺着微垂的头发落到丹恒身上，丹恒反手揽住他的脸，听他咬着牙说，丹恒老师，你怎么是这样的，你在床上，你在这些时候…</p>
+        <p>是什么样？丹恒觉得好笑，他在冲撞里断断续续地问他。男人似乎觉得就这样仍然不够，把他翻过面抱在怀里，借着重量在怀里颠簸几下，分明已经听到了丹恒拔高的惊喘，仍恶劣地指了指自己的耳朵。</p>
+        <p>丹恒熟悉那样的动作，他不免开始紧张起来，紧张的同时身体也流出更多蜜液，他不知道他瞬间的心跳加快是因为哪种。刃把他放在床铺上，抬高了他的腿，绷紧身体加快速度。丹恒最初只是抓着床单接受，很快便败下阵来——他似乎从没有在这件事上胜出过——男人直着身体，离他太远，他不得不试图坐起来才能摸到他的手或者别的地方，或者发出一些求饶的呻吟。</p>
+        <p>他的胸口也开始发痒。今晚还没有，但在往常……几乎每次做爱，男人都会着迷地掀开他的衣服吻到他的胸乳，他深呼吸、舔吻，用牙齿衔住并摩挲，感受到丹恒的颤栗后再松开，向上亲吻他抬起的下巴和脖颈。丹恒总在这样的攻势下哭出声，他呢喃着说些胡话，喜欢或者…喜欢你。</p>
+        <p>刃便总是凑近，把自己的耳朵贴在丹恒的胸口，一只毫无安全感的犬科生物，用小缺陷作为借口，不够聪明的技巧，但丹恒就算识破也无法怪罪。再说一遍。他这样说。再说一遍，丹恒。</p>
+        <p>喜欢，喜欢…丹恒想，丹恒说。回忆还是现实，他大概现在仍在呢喃这句话，快感密密麻麻地爬上他的大脑。他快要受不了了。</p>
+        <p>不行了，他这样说，双腿都在哆嗦，眼前一阵发花。丹恒眨着眼去看刃的表情，他果然依然只是勾了勾唇，歪歪脑袋指了指自己的耳朵。紧接着，在丹恒濒临极点的边缘伸手顺着他的小腹一路摁上去，直到丹恒射精，后腰离开床面，被刃托住，抬起来。</p>
+        <p>丹恒喘不过气，抱在他身上，刃偏头去吻他，被他躲开了。“总是这样！”丹恒说，似是嗔怒，“总是拿这个…”他话没有能说完，男人的视线落在他的嘴唇上，很快垂下了睫毛，仿佛拒绝沟通，又很委屈一样的，他便硬生生把后半句话吞了下去，伸手捧起他的脸，逼他看着自己，换了句话。“好啦，好啦…我没说不可以，只是要注意……”</p>
+        <p>刃仰起头，追着他的嘴唇，他们接了今晚的第二个吻，丹恒也在窒息里再次高潮，感受到刃的东西也留在了自己的身体里。</p>
+        <p>“旗袍…旗袍！”丹恒喊他，刃咬了咬他的唇角，点点头，伸手帮他把旗袍脱了下来。</p>
+        <p>夜晚还很长，他们现在还有很多时间。</p>
+      </section>
+
+      <div class="chapter-nav">
+        <button id="chapterPrev" class="chapter-button" type="button">上一章</button>
+        <span id="chapterInfo" class="chapter-nav__info"></span>
+        <button id="chapterNext" class="chapter-button" type="button">下一章</button>
+      </div>
+    </article>
+  </div>
+
+  <div id="selectionPopover" class="selection-popover hidden" aria-hidden="true">
+    <p id="selectionPreview" class="selection-popover__preview"></p>
+    <form id="selectionForm" class="selection-popover__form">
+      <input id="selectionAuthor" type="text" placeholder="称呼">
+      <textarea id="selectionComment" rows="3" placeholder="针对划线写评论"></textarea>
+      <button type="submit">提交</button>
+    </form>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const chapters = Array.from(document.querySelectorAll(".chapter"));
+    const prevButton = document.getElementById("chapterPrev");
+    const nextButton = document.getElementById("chapterNext");
+    const infoEl = document.getElementById("chapterInfo");
+    let currentIndex = 0;
+    const SUPABASE_URL = window.SUPABASE_URL;
+    const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
+    const params = new URLSearchParams(window.location.search);
+    const backEl = document.getElementById("readBack");
+    const back = params.get("back");
+    if (backEl && back) {
+      backEl.href = back;
+    }
+    const NAME_STORAGE_KEY = "lakis_room_comment_name";
+    const selectionPopover = document.getElementById("selectionPopover");
+    const selectionPreview = document.getElementById("selectionPreview");
+    const selectionForm = document.getElementById("selectionForm");
+    const selectionAuthor = document.getElementById("selectionAuthor");
+    const selectionComment = document.getElementById("selectionComment");
+    const chapterUI = new Map();
+    let articleId = null;
+    let chapterRanges = [];
+    let selectionState = null;
+
+    function renderChapter() {
+      chapters.forEach((chapter, index) => {
+        chapter.classList.toggle("is-active", index === currentIndex);
+      });
+      infoEl.textContent = `第 ${currentIndex + 1} 章 / 共 ${chapters.length} 章`;
+      prevButton.disabled = currentIndex === 0;
+      nextButton.disabled = currentIndex === chapters.length - 1;
+    }
+
+    function formatDate(value) {
+      if (!value) return "";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value);
+      return date.toISOString().slice(0, 10);
+    }
+
+    function loadSavedName() {
+      try {
+        return localStorage.getItem(NAME_STORAGE_KEY) || "";
+      } catch {
+        return "";
+      }
+    }
+
+    function saveName(value) {
+      try {
+        localStorage.setItem(NAME_STORAGE_KEY, value);
+      } catch {
+        // ignore
+      }
+    }
+
+    async function apiFetch(path, { method = "GET", body } = {}) {
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        throw new Error("Missing config");
+      }
+      const headers = { apikey: SUPABASE_ANON_KEY };
+      if (body) headers["Content-Type"] = "application/json";
+      const res = await fetch(`${SUPABASE_URL}${path}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined
+      });
+      const text = await res.text();
+      let data;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+      if (!res.ok) {
+        const message =
+          typeof data === "object" && data?.message
+            ? data.message
+            : res.statusText || "Request failed";
+        throw new Error(message);
+      }
+      return data;
+    }
+
+    function buildChapterUI() {
+      let paragraphIndex = 0;
+      chapterRanges = chapters.map((chapter, chapterIndex) => {
+        const paragraphs = Array.from(chapter.querySelectorAll("p"));
+        const start = paragraphIndex;
+        paragraphs.forEach((paragraph) => {
+          paragraph.dataset.paragraph = String(paragraphIndex);
+          paragraph.dataset.chapter = String(chapterIndex + 1);
+          paragraphIndex += 1;
+        });
+        const end = Math.max(start, paragraphIndex - 1);
+
+        const container = document.createElement("div");
+        container.className = "chapter-comments";
+        container.dataset.chapter = String(chapterIndex + 1);
+        container.innerHTML = `
+          <div class="chapter-comments__header">
+            <span>评论</span>
+            <span class="chapter-comments__count"></span>
+          </div>
+          <div class="chapter-comments__list"></div>
+          <form class="chapter-comments__form">
+            <input type="text" placeholder="称呼">
+            <textarea rows="4" placeholder="写下你的评论"></textarea>
+            <button type="submit">提交</button>
+          </form>
+        `;
+        chapter.appendChild(container);
+
+        const list = container.querySelector(".chapter-comments__list");
+        const count = container.querySelector(".chapter-comments__count");
+        const form = container.querySelector("form");
+        const authorInput = form.querySelector("input");
+        const contentInput = form.querySelector("textarea");
+
+        form.addEventListener("submit", (event) =>
+          submitChapterComment(event, chapterIndex + 1, authorInput, contentInput)
+        );
+
+        chapterUI.set(chapterIndex + 1, {
+          list,
+          count,
+          authorInput,
+          contentInput
+        });
+
+        return { start, end };
+      });
+
+      const savedName = loadSavedName();
+      if (savedName) {
+        chapterUI.forEach((ui) => {
+          ui.authorInput.value = savedName;
+        });
+        if (selectionAuthor) selectionAuthor.value = savedName;
+      }
+    }
+
+    async function loadArticleId() {
+      try {
+        const data = await apiFetch(
+          `/rest/v1/articles?select=id,title&title=eq.${encodeURIComponent(
+            "小雀停在刀锋上"
+          )}&limit=1`
+        );
+        articleId = Array.isArray(data) && data[0] ? data[0].id : null;
+      } catch {
+        articleId = null;
+      }
+    }
+
+    function setCommentsUnavailable() {
+      chapterUI.forEach((ui) => {
+        ui.count.textContent = "";
+        ui.list.innerHTML = "";
+      });
+    }
+
+    function renderComments(comments) {
+      chapterUI.forEach((ui, chapterNumber) => {
+        const range = chapterRanges[chapterNumber - 1];
+        const chapterComments = comments.filter(
+          (comment) =>
+            comment.comment_type === "chapter" &&
+            String(comment.selection_text) === String(chapterNumber)
+        );
+        const selectionComments = comments.filter((comment) => {
+          const index = Number(comment.paragraph_index);
+          return (
+            comment.comment_type === "selection" &&
+            Number.isFinite(index) &&
+            index >= range.start &&
+            index <= range.end
+          );
+        });
+
+        const merged = [...selectionComments, ...chapterComments];
+        ui.count.textContent = merged.length ? `${merged.length}` : "0";
+        if (!merged.length) {
+          ui.list.innerHTML = '<div class="chapter-comment">暂无评论</div>';
+          return;
+        }
+        ui.list.innerHTML = merged
+          .map((comment) => {
+            const name = comment.author || "Anonymous";
+            const time = formatDate(comment.created_at);
+            const content = String(comment.content || "");
+            let selectionLabel = "";
+            if (comment.comment_type === "selection") {
+              const paragraphIndex = Number(comment.paragraph_index) - range.start + 1;
+              selectionLabel = `<div class="chapter-comment__selection">第 ${paragraphIndex} 段：${comment.selection_text || ""}</div>`;
+            }
+            return `
+              <div class="chapter-comment">
+                <div class="chapter-comment__meta">
+                  <span>${name}</span>
+                  <span>${time}</span>
+                </div>
+                ${selectionLabel}
+                <p class="chapter-comment__content">${content}</p>
+              </div>
+            `;
+          })
+          .join("");
+      });
+    }
+
+    async function loadComments() {
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        setCommentsUnavailable();
+        return;
+      }
+      if (!articleId) {
+        await loadArticleId();
+      }
+      if (!articleId) {
+        setCommentsUnavailable();
+        return;
+      }
+      try {
+        const data = await apiFetch(
+          `/rest/v1/comments?select=*&article_id=eq.${articleId}&order=created_at.desc`
+        );
+        renderComments(Array.isArray(data) ? data : []);
+      } catch {
+        setCommentsUnavailable();
+      }
+    }
+
+    async function submitChapterComment(event, chapterNumber, authorInput, contentInput) {
+      event.preventDefault();
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+      if (!articleId) await loadArticleId();
+      if (!articleId) return;
+      const authorValue = authorInput.value.trim();
+      const author = authorValue || "Anonymous";
+      const content = contentInput.value.trim();
+      if (!content) return;
+      if (authorValue) saveName(authorValue);
+      try {
+        await apiFetch(`/rest/v1/comments`, {
+          method: "POST",
+          body: {
+            article_id: articleId,
+            author,
+            content,
+            comment_type: "chapter",
+            selection_text: String(chapterNumber)
+          }
+        });
+      } catch {
+        return;
+      }
+      contentInput.value = "";
+      await loadComments();
+    }
+
+    function hideSelectionPopover() {
+      if (!selectionPopover) return;
+      selectionPopover.classList.add("hidden");
+      selectionPopover.setAttribute("aria-hidden", "true");
+      selectionState = null;
+    }
+
+    function showSelectionPopover(range, paragraphIndex, text) {
+      if (!selectionPopover || !selectionPreview) return;
+      const rect = range.getBoundingClientRect();
+      selectionPopover.style.top = `${rect.bottom + 8}px`;
+      selectionPopover.style.left = `${Math.min(rect.left, window.innerWidth - 340)}px`;
+      selectionPreview.textContent = text.length > 120 ? `${text.slice(0, 120)}...` : text;
+      selectionPopover.classList.remove("hidden");
+      selectionPopover.setAttribute("aria-hidden", "false");
+      selectionState = { paragraphIndex, text };
+    }
+
+    function handleSelection() {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed) {
+        hideSelectionPopover();
+        return;
+      }
+      const range = selection.getRangeAt(0);
+      const container = range.commonAncestorContainer;
+      const element =
+        container.nodeType === 1 ? container : container.parentElement;
+      const paragraph = element ? element.closest("p[data-paragraph]") : null;
+      if (!paragraph) {
+        hideSelectionPopover();
+        return;
+      }
+      const text = selection.toString().trim();
+      if (!text) {
+        hideSelectionPopover();
+        return;
+      }
+      const paragraphIndex = Number(paragraph.dataset.paragraph || 0);
+      showSelectionPopover(range, paragraphIndex, text);
+    }
+
+    async function submitSelectionComment(event) {
+      event.preventDefault();
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !selectionState) return;
+      if (!articleId) await loadArticleId();
+      if (!articleId) return;
+      const authorValue = selectionAuthor.value.trim();
+      const author = authorValue || "Anonymous";
+      const content = selectionComment.value.trim();
+      if (!content) return;
+      if (authorValue) saveName(authorValue);
+      try {
+        await apiFetch(`/rest/v1/comments`, {
+          method: "POST",
+          body: {
+            article_id: articleId,
+            author,
+            content,
+            comment_type: "selection",
+            paragraph_index: selectionState.paragraphIndex,
+            selection_text: selectionState.text
+          }
+        });
+      } catch {
+        return;
+      }
+      selectionComment.value = "";
+      hideSelectionPopover();
+      await loadComments();
+    }
+
+    prevButton.addEventListener("click", () => {
+      if (currentIndex > 0) {
+        currentIndex -= 1;
+        renderChapter();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    });
+
+    nextButton.addEventListener("click", () => {
+      if (currentIndex < chapters.length - 1) {
+        currentIndex += 1;
+        renderChapter();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    });
+
+    renderChapter();
+    buildChapterUI();
+    loadComments();
+
+    document.addEventListener("mouseup", handleSelection);
+    document.addEventListener("mousedown", (event) => {
+      if (!selectionPopover) return;
+      if (!selectionPopover.contains(event.target)) {
+        hideSelectionPopover();
+      }
+    });
+    if (selectionForm) {
+      selectionForm.addEventListener("submit", submitSelectionComment);
+    }
+  </script>
+</body>
+</html>
+

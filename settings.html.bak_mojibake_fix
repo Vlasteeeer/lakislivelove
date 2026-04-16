@@ -1,0 +1,180 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lakis' ROOM 路 璁剧疆</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero-min">
+      <h1 class="hero-min__title">璁剧疆</h1>
+      <a class="back-home" href="./index.html?skipGate=1">杩斿洖涓婚〉</a>
+    </header>
+
+    <section class="settings">
+      <div class="settings__card">
+        <div class="settings__title">绠＄悊鍛樼櫥褰?/div>
+        <div class="settings__actions">
+          <button id="settingsShowLogin" class="button button--solid" type="button">杩涘叆鐧诲綍</button>
+          <button id="settingsLogout" class="button button--ghost" type="button">閫€鍑?/button>
+        </div>
+        <div id="settingsLoginPanel" class="settings__login hidden">
+          <div class="settings__row">
+            <input id="settingsEmail" type="email" placeholder="绠＄悊鍛橀偖绠?>
+            <input id="settingsPassword" type="password" placeholder="瀵嗙爜">
+          </div>
+          <div class="settings__actions">
+            <button id="settingsLogin" class="button button--solid" type="button">鐧诲綍</button>
+          </div>
+        </div>
+        <div id="settingsStatus" class="settings__status"></div>
+      </div>
+
+      <div class="settings__card">
+        <div class="settings__title">蹇嵎鍏ュ彛</div>
+        <div class="settings__actions">
+          <a class="button button--ghost" href="./traffic.html">浜ら€?/a>
+          <a class="button button--ghost" href="./qingshui.html">娓呮按</a>
+          <a class="button button--ghost" href="./guestbook.html">鐣欒█澧?/a>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const SUPABASE_URL = window.SUPABASE_URL;
+    const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
+    const SESSION_KEY = "lakis_room_session";
+
+    const showLoginButton = document.getElementById("settingsShowLogin");
+    const loginPanel = document.getElementById("settingsLoginPanel");
+    const emailInput = document.getElementById("settingsEmail");
+    const passwordInput = document.getElementById("settingsPassword");
+    const loginButton = document.getElementById("settingsLogin");
+    const logoutButton = document.getElementById("settingsLogout");
+    const statusEl = document.getElementById("settingsStatus");
+
+    function getSession() {
+      try {
+        const raw = localStorage.getItem(SESSION_KEY);
+        if (!raw) return null;
+        const session = JSON.parse(raw);
+        if (!session || !session.access_token || !session.expires_at) return null;
+        if (Date.now() / 1000 > session.expires_at) return null;
+        return session;
+      } catch {
+        return null;
+      }
+    }
+
+    function setSession(session) {
+      try {
+        localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      } catch {
+        // ignore
+      }
+    }
+
+    function clearSession() {
+      try {
+        localStorage.removeItem(SESSION_KEY);
+      } catch {
+        // ignore
+      }
+    }
+
+    async function apiFetch(path, { method = "GET", body } = {}) {
+      const headers = { apikey: SUPABASE_ANON_KEY };
+      if (body) headers["Content-Type"] = "application/json";
+      const res = await fetch(`${SUPABASE_URL}${path}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined
+      });
+      const text = await res.text();
+      let data;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+      if (!res.ok) {
+        const message =
+          typeof data === "object" && data?.message
+            ? data.message
+            : res.statusText || "Request failed";
+        throw new Error(message);
+      }
+      return data;
+    }
+
+    async function authLogin(email, password) {
+      const data = await apiFetch(
+        `/auth/v1/token?grant_type=password`,
+        { method: "POST", body: { email, password } }
+      );
+      const session = {
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expires_at: Math.floor(Date.now() / 1000) + data.expires_in,
+        user: data.user
+      };
+      setSession(session);
+      return session;
+    }
+
+    function renderStatus() {
+      const session = getSession();
+      const loggedIn = Boolean(session?.access_token);
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        statusEl.textContent = "褰撳墠鏈厤缃?Supabase銆?;
+        if (showLoginButton) showLoginButton.disabled = true;
+        if (loginButton) loginButton.disabled = true;
+        if (logoutButton) logoutButton.disabled = true;
+        return;
+      }
+      if (showLoginButton) showLoginButton.classList.toggle("hidden", loggedIn);
+      if (logoutButton) logoutButton.disabled = !loggedIn;
+      if (loginPanel) loginPanel.classList.toggle("hidden", loggedIn);
+      if (loginButton) loginButton.disabled = loggedIn;
+      statusEl.textContent = loggedIn
+        ? `宸茬櫥褰曪細${session.user?.email || ""}`
+        : "鏈櫥褰?;
+    }
+
+    if (showLoginButton) {
+      showLoginButton.addEventListener("click", () => {
+        if (loginPanel) loginPanel.classList.remove("hidden");
+        if (emailInput) emailInput.focus();
+      });
+    }
+
+    loginButton.addEventListener("click", async () => {
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+      if (!email || !password) return;
+      statusEl.textContent = "鐧诲綍涓?..";
+      try {
+        await authLogin(email, password);
+        passwordInput.value = "";
+      } catch (err) {
+        statusEl.textContent = `鐧诲綍澶辫触锛?{err.message}`;
+        return;
+      }
+      renderStatus();
+    });
+
+    logoutButton.addEventListener("click", () => {
+      clearSession();
+      renderStatus();
+    });
+
+    renderStatus();
+  </script>
+</body>
+</html>
+
+

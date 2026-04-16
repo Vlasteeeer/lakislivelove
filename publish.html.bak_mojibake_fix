@@ -1,0 +1,821 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lakis' ROOM - 鍙戝竷</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero-min">
+      <h1 class="hero-min__title">鍙戝竷</h1>
+      <a class="back-home" href="./index.html?skipGate=1">杩斿洖涓婚〉</a>
+    </header>
+
+    <section class="settings">
+      <div class="settings__card">
+        <div class="settings__title">鍒嗙被绠＄悊</div>
+        <div class="publish-scope">
+          <label class="publish-scope__item">
+            <input type="radio" name="scope" value="浜ら€? checked>
+            浜ら€?          </label>
+          <label class="publish-scope__item">
+            <input type="radio" name="scope" value="娓呮按">
+            娓呮按
+          </label>
+        </div>
+        <div class="settings__status">鍙戝竷鏃朵細鎸変笂鏂瑰垎绫昏繘鍏ュ搴旀澘鍧椼€?/div>
+      </div>
+
+      <div class="settings__card">
+        <div class="settings__title">鏂囩珷鍙戝竷</div>
+        <form id="publishForm" class="form-block">
+          <input id="title" type="text" placeholder="鏍囬">
+          <input id="tags" type="text" placeholder="鏍囩锛堢┖鏍煎垎闅旓紝鍙涓級">
+          <textarea id="summary" rows="3" placeholder="绠€浠?></textarea>
+
+          <label class="chapter-toggle">
+            <input id="chapterMode" type="checkbox">
+            澶氱珷鑺傜紪杈?          </label>
+
+          <div id="chapterTools" class="chapter-editor hidden">
+            <div class="settings__actions">
+              <input id="chapterCount" type="number" min="1" max="100" value="1" style="max-width:140px;" placeholder="绔犺妭鏁?>
+              <button id="applyChapterCount" class="button button--ghost" type="button">璁剧疆绔犺妭鏁?/button>
+              <button id="addChapter" class="button button--ghost" type="button">+ 娣诲姞绔犺妭</button>
+            </div>
+            <div id="chapterList" class="chapter-editor__panel"></div>
+          </div>
+
+          <textarea id="content" rows="12" placeholder="姝ｆ枃锛堟钀戒箣闂寸┖涓€琛岋級"></textarea>
+
+          <div class="settings__actions">
+            <button id="submit" class="button button--solid" type="submit">鍙戝竷</button>
+            <button id="cancelEdit" class="button button--ghost hidden" type="button">鍙栨秷缂栬緫</button>
+            <button id="indentFormat" class="button button--ghost" type="button">鎺掔増锛堟瘡娈电缉杩涗袱瀛楃锛?/button>
+          </div>
+          <div id="publishStatus" class="settings__status"></div>
+
+          <div class="bulk-import">
+            <div class="settings__title">鎵归噺瀵煎叆锛堥『搴忛€愮瘒缂栬緫锛?/div>
+            <input
+              id="bulkFiles"
+              type="file"
+              multiple
+              accept=".txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            >
+            <div class="settings__actions">
+              <button id="bulkParse" class="button button--ghost" type="button">璇诲彇鏂囦欢</button>
+              <button id="queueDoneNext" class="button button--solid" type="button" disabled>褰撳墠瀹屾垚锛屽垏鍒颁笅涓€绡?/button>
+              <button id="queueClear" class="button button--ghost" type="button" disabled>娓呯┖闃熷垪</button>
+            </div>
+            <div id="bulkStatus" class="settings__status"></div>
+            <div id="bulkPreview" class="published-list"></div>
+          </div>
+        </form>
+      </div>
+
+      <div class="settings__card">
+        <div class="settings__title">宸插彂甯冩枃绔?/div>
+        <div class="settings__actions">
+          <button id="reloadArticles" class="button button--ghost" type="button">鍒锋柊鍒楄〃</button>
+        </div>
+        <div class="publish-scope">
+          <label class="publish-scope__item">
+            <input type="radio" name="publishedScope" value="all" checked>
+            鍏ㄩ儴
+          </label>
+          <label class="publish-scope__item">
+            <input type="radio" name="publishedScope" value="浜ら€?>
+            浜ら€?          </label>
+          <label class="publish-scope__item">
+            <input type="radio" name="publishedScope" value="娓呮按">
+            娓呮按
+          </label>
+        </div>
+        <input id="publishedSearch" type="search" placeholder="鎼滅储宸插彂甯冩枃绔?>
+        <div id="publishedList" class="published-list"></div>
+      </div>
+    </section>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
+  <script>
+    const SUPABASE_URL = window.SUPABASE_URL;
+    const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
+    const SESSION_KEY = "lakis_room_session";
+
+    const publishForm = document.getElementById("publishForm");
+    const titleInput = document.getElementById("title");
+    const tagsInput = document.getElementById("tags");
+    const summaryInput = document.getElementById("summary");
+    const contentInput = document.getElementById("content");
+    const submitButton = document.getElementById("submit");
+    const cancelEditButton = document.getElementById("cancelEdit");
+    const indentFormatButton = document.getElementById("indentFormat");
+    const publishStatus = document.getElementById("publishStatus");
+
+    const chapterMode = document.getElementById("chapterMode");
+    const chapterTools = document.getElementById("chapterTools");
+    const chapterCountInput = document.getElementById("chapterCount");
+    const applyChapterCountButton = document.getElementById("applyChapterCount");
+    const addChapterButton = document.getElementById("addChapter");
+    const chapterList = document.getElementById("chapterList");
+
+    const bulkFilesInput = document.getElementById("bulkFiles");
+    const bulkParseButton = document.getElementById("bulkParse");
+    const queueDoneNextButton = document.getElementById("queueDoneNext");
+    const queueClearButton = document.getElementById("queueClear");
+    const bulkStatus = document.getElementById("bulkStatus");
+    const bulkPreview = document.getElementById("bulkPreview");
+
+    const publishedList = document.getElementById("publishedList");
+    const reloadArticles = document.getElementById("reloadArticles");
+    const publishedSearch = document.getElementById("publishedSearch");
+
+    let canPublish = false;
+    let editingArticleId = null;
+    let publishedArticlesCache = [];
+    let queueDrafts = [];
+    let queueCursor = -1;
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function normalizeText(value) {
+      return String(value || "").trim().toLowerCase();
+    }
+
+    function getScope() {
+      const selected = document.querySelector('input[name="scope"]:checked');
+      return selected ? selected.value : "浜ら€?;
+    }
+
+    function getSession() {
+      try {
+        const raw = localStorage.getItem(SESSION_KEY);
+        if (!raw) return null;
+        const session = JSON.parse(raw);
+        if (!session || !session.access_token || !session.expires_at) return null;
+        if (Date.now() / 1000 > session.expires_at) return null;
+        return session;
+      } catch {
+        return null;
+      }
+    }
+
+    async function apiFetch(path, { method = "GET", body, auth = false } = {}) {
+      const headers = { apikey: SUPABASE_ANON_KEY };
+      const session = getSession();
+      if (auth && session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+      if (body) headers["Content-Type"] = "application/json";
+
+      const res = await fetch(`${SUPABASE_URL}${path}`, {
+        method,
+        cache: "no-store",
+        headers,
+        body: body ? JSON.stringify(body) : undefined
+      });
+      const text = await res.text();
+      let data;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+      if (!res.ok) {
+        const message = typeof data === "object" && data?.message ? data.message : (res.statusText || "Request failed");
+        throw new Error(message);
+      }
+      return data;
+    }
+
+    async function checkAdmin() {
+      const session = getSession();
+      if (!session?.user?.email) return false;
+      try {
+        const data = await apiFetch(
+          `/rest/v1/admins?select=email&email=eq.${encodeURIComponent(session.user.email)}&limit=1`,
+          { auth: true }
+        );
+        return Array.isArray(data) && data.length > 0;
+      } catch {
+        return false;
+      }
+    }
+
+    function isChapterHeading(text) {
+      const t = String(text || "").trim();
+      if (!t) return false;
+      if (/^绗琜涓€浜屼笁鍥涗簲鍏竷鍏節鍗佺櫨鍗冧竾闆躲€?-9]+绔??:\s+.*)?$/.test(t)) return true;
+      if (/^[涓€浜屼笁鍥涗簲鍏竷鍏節鍗佺櫨鍗冧竾闆躲€?-9]+[銆?锛嶿\s*.+$/.test(t)) return true;
+      if (/^[锛?][涓€浜屼笁鍥涗簲鍏竷鍏節鍗佺櫨鍗冧竾闆躲€?-9]+[)锛塢\s*.+$/.test(t)) return true;
+      if (/^chapter\s+[0-9ivxlcdm]+(?:\s*[:锛?\-]?\s*.*)?$/i.test(t)) return true;
+      return false;
+    }
+
+    function normalizeChapterHeading(text) {
+      const t = String(text || "").trim().replace(/\s+/g, " ");
+      if (!t) return "";
+      if (/^绗琜涓€浜屼笁鍥涗簲鍏竷鍏節鍗佺櫨鍗冧竾闆躲€?-9]+绔?.test(t)) return t;
+      const s1 = t.match(/^([涓€浜屼笁鍥涗簲鍏竷鍏節鍗佺櫨鍗冧竾闆躲€?-9]+)[銆?锛嶿\s*(.*)$/);
+      if (s1) return `绗?{s1[1]}绔?{s1[2] ? ` ${s1[2]}` : ""}`;
+      const s2 = t.match(/^[锛?]([涓€浜屼笁鍥涗簲鍏竷鍏節鍗佺櫨鍗冧竾闆躲€?-9]+)[)锛塢\s*(.*)$/);
+      if (s2) return `绗?{s2[1]}绔?{s2[2] ? ` ${s2[2]}` : ""}`;
+      const s3 = t.match(/^chapter\s+([0-9ivxlcdm]+)(?:\s*[:锛?\-]?\s*(.*))?$/i);
+      if (s3) return `Chapter ${s3[1]}${s3[2] ? ` ${s3[2]}` : ""}`;
+      return t;
+    }
+
+    function isChapterHeadingSmart(text, { isFirstLine = false } = {}) {
+      const t = String(text || "").trim();
+      if (!t) return false;
+
+      const compactLen = t.replace(/\s+/g, "").length;
+      if (compactLen > 36) return false;
+      if (/[銆傦紒锛燂紱;!?]$/.test(t)) return false;
+
+      if (/^绗琜涓€浜屼笁鍥涗簲鍏竷鍏節鍗佺櫨鍗冧竾闆躲€囦袱0-9]+绔??:\s+.*)?$/.test(t)) return true;
+      if (/^chapter\s+[0-9ivxlcdm]+(?:\s*[:锛?\-]?\s*.*)?$/i.test(t)) return true;
+
+      if (isFirstLine) return false;
+      if (/^[涓€浜屼笁鍥涗簲鍏竷鍏節鍗佺櫨鍗冧竾闆躲€囦袱0-9]+[銆?锛嶿\s*.+$/.test(t)) return true;
+      if (/^[锛?][涓€浜屼笁鍥涗簲鍏竷鍏節鍗佺櫨鍗冧竾闆躲€囦袱0-9]+[)锛塢\s*.+$/.test(t)) return true;
+      return false;
+    }
+
+    function splitChapters(rawText) {
+      const raw = String(rawText || "").trim();
+      if (!raw) return { explicit: false, chapters: [] };
+      const lines = raw.split(/\r?\n/);
+      const trimmedLines = lines.map((line) => line.trim());
+      const firstNonEmptyIndex = trimmedLines.findIndex(Boolean);
+      const headingCount = trimmedLines.reduce((count, line, idx) => {
+        return isChapterHeadingSmart(line, { isFirstLine: idx === firstNonEmptyIndex }) ? count + 1 : count;
+      }, 0);
+      if (headingCount < 2) {
+        return {
+          explicit: false,
+          chapters: [{ title: "绗?绔?, content: raw }]
+        };
+      }
+      const chapters = [];
+      let current = { title: "", content: [] };
+      let explicit = false;
+
+      function pushCurrent() {
+        if (!current.title && !current.content.length) return;
+        chapters.push({
+          title: current.title || `绗?{chapters.length + 1}绔燻,
+          content: current.content.join("\n").trim()
+        });
+      }
+
+      lines.forEach((line, idx) => {
+        const t = line.trim();
+        if (isChapterHeadingSmart(t, { isFirstLine: idx === firstNonEmptyIndex })) {
+          explicit = true;
+          pushCurrent();
+          current = { title: normalizeChapterHeading(t), content: [] };
+          return;
+        }
+        if (!t) {
+          if (current.content.length && current.content[current.content.length - 1] !== "") current.content.push("");
+          return;
+        }
+        current.content.push(line);
+      });
+      pushCurrent();
+
+      if (!explicit) {
+        return {
+          explicit: false,
+          chapters: [{ title: "绗?绔?, content: raw }]
+        };
+      }
+
+      if (chapters.length >= 2) {
+        const first = chapters[0] || {};
+        const firstTitle = String(first.title || "").trim();
+        const firstBody = String(first.content || "").trim();
+        const looksLikeLeadingTitle =
+          /^绗?绔?/.test(firstTitle) &&
+          firstBody.length > 0 &&
+          firstBody.length <= 40 &&
+          !/\n/.test(firstBody) &&
+          !/[銆傦紒锛燂紱;!?]/.test(firstBody);
+        if (looksLikeLeadingTitle) {
+          chapters.shift();
+        }
+      }
+      return { explicit: true, chapters };
+    }
+
+    function buildContentFromChapters() {
+      const items = Array.from(chapterList.querySelectorAll(".chapter-item"));
+      const blocks = items.map((item, index) => {
+        const title = item.querySelector(".chapter-item__title").value.trim() || `绗?{index + 1}绔燻;
+        const body = item.querySelector("textarea").value.trim();
+        if (!title && !body) return "";
+        return `${title}\n\n${body}`.trim();
+      }).filter(Boolean);
+      return blocks.join("\n\n");
+    }
+
+    function createChapterItem(title = "", content = "") {
+      const item = document.createElement("div");
+      item.className = "chapter-item";
+      item.innerHTML = `
+        <div class="chapter-item__row">
+          <input class="chapter-item__title" type="text" placeholder="绔犺妭鏍囬" value="${escapeHtml(title)}">
+          <button class="chapter-remove" type="button">鍒犻櫎</button>
+        </div>
+        <textarea rows="6" placeholder="鏈珷姝ｆ枃">${escapeHtml(content)}</textarea>
+      `;
+      item.querySelector(".chapter-remove").addEventListener("click", () => item.remove());
+      chapterList.appendChild(item);
+      syncChapterCount();
+    }
+
+    function syncChapterCount() {
+      chapterCountInput.value = String(Math.max(1, chapterList.querySelectorAll(".chapter-item").length));
+    }
+
+    function setChapterCount(count) {
+      const n = Math.max(1, Math.min(100, Number(count) || 1));
+      const current = Array.from(chapterList.querySelectorAll(".chapter-item"));
+      if (current.length < n) {
+        for (let i = current.length; i < n; i += 1) createChapterItem(`绗?{i + 1}绔燻, "");
+      } else if (current.length > n) {
+        for (let i = current.length - 1; i >= n; i -= 1) current[i].remove();
+      }
+      syncChapterCount();
+    }
+
+    function setChapterMode(enabled) {
+      chapterMode.checked = enabled;
+      chapterTools.classList.toggle("hidden", !enabled);
+      contentInput.classList.toggle("hidden", enabled);
+      if (enabled && !chapterList.querySelector(".chapter-item")) createChapterItem("绗?绔?, "");
+    }
+
+    function fillEditorFromDraft(draft) {
+      titleInput.value = draft.title || "";
+      summaryInput.value = draft.summary || "";
+      if (draft.hasChapters && Array.isArray(draft.chapters) && draft.chapters.length) {
+        setChapterMode(true);
+        chapterList.innerHTML = "";
+        draft.chapters.forEach((ch, idx) => {
+          createChapterItem(ch.title || `绗?{idx + 1}绔燻, ch.content || "");
+        });
+      } else {
+        setChapterMode(false);
+        contentInput.value = draft.content || "";
+      }
+    }
+
+    function clearEditorKeepTagsAndScope() {
+      titleInput.value = "";
+      summaryInput.value = "";
+      contentInput.value = "";
+      chapterList.innerHTML = "";
+      setChapterMode(false);
+    }
+
+    function normalizeImportedText(text) {
+      return String(text || "")
+        .replace(/\r\n/g, "\n")
+        .replace(/\u0000/g, "")
+        .split("\n")
+        .map((line) => line.replace(/\s+$/g, ""))
+        .join("\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    }
+
+    function stripExt(name) {
+      return String(name || "").replace(/\.[^/.]+$/, "");
+    }
+
+    function autoSummary(content) {
+      const blocks = String(content || "")
+        .split(/\n\s*\n/g)
+        .map((block) => block.replace(/\s+/g, " ").trim())
+        .filter((block) => block && !isChapterHeading(block));
+      return blocks.length ? blocks[0].slice(0, 120) : "";
+    }
+
+    function getCommonTags() {
+      return tagsInput.value
+        .split(/[\s,锛屻€乚+/)
+        .map((tag) => tag.trim())
+        .filter(Boolean);
+    }
+
+    function renderQueuePreview() {
+      if (!queueDrafts.length) {
+        bulkPreview.innerHTML = '<div class="empty-state">鏆傛棤寰呯紪杈戞枃妗?/div>';
+        queueDoneNextButton.disabled = true;
+        queueClearButton.disabled = true;
+        return;
+      }
+      queueDoneNextButton.disabled = false;
+      queueClearButton.disabled = false;
+      bulkPreview.innerHTML = queueDrafts.map((draft, index) => {
+        const active = index === queueCursor ? "is-active" : "";
+        const stateText = draft.done ? "宸插畬鎴? : (index === queueCursor ? "褰撳墠缂栬緫涓? : "寰呯紪杈?);
+        const summaryLine = draft.summary
+          ? `<span>${escapeHtml(draft.summary)}</span>`
+          : `<span></span>`;
+        return `
+          <div class="published-item ${active}">
+            <div class="published-item__meta">
+              <span class="published-item__title">${escapeHtml(draft.title)}</span>
+              <div class="published-item__right">
+                <span>${escapeHtml((draft.ext || "").toUpperCase())}</span>
+                <span>${draft.hasChapters ? `澶氱珷鑺?${draft.chapters.length}` : "鍗曠瘒"}</span>
+              </div>
+            </div>
+            <div class="published-item__meta">
+              ${summaryLine}
+              <span>${stateText}</span>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function moveToQueue(index) {
+      if (index < 0 || index >= queueDrafts.length) return;
+      queueCursor = index;
+      fillEditorFromDraft(queueDrafts[index]);
+      renderQueuePreview();
+      bulkStatus.textContent = `褰撳墠锛氱 ${queueCursor + 1}/${queueDrafts.length} 绡嘸;
+    }
+
+    function finishCurrentAndNext() {
+      if (!queueDrafts.length || queueCursor < 0) return;
+      queueDrafts[queueCursor].done = true;
+      if (queueCursor >= queueDrafts.length - 1) {
+        bulkStatus.textContent = "闃熷垪澶勭悊瀹屾垚銆?;
+        clearEditorKeepTagsAndScope();
+        renderQueuePreview();
+        return;
+      }
+      moveToQueue(queueCursor + 1);
+    }
+
+    async function parseOneFile(file) {
+      const filename = String(file?.name || "");
+      const ext = filename.toLowerCase().endsWith(".docx") ? "docx" : "txt";
+      let content = "";
+      if (ext === "txt") {
+        content = await file.text();
+      } else {
+        if (!window.mammoth || typeof window.mammoth.extractRawText !== "function") {
+          throw new Error("Word 瑙ｆ瀽鍣ㄥ姞杞藉け璐ワ紝璇疯仈缃戝悗閲嶈瘯");
+        }
+        const buffer = await file.arrayBuffer();
+        const result = await window.mammoth.extractRawText({ arrayBuffer: buffer });
+        content = result?.value || "";
+      }
+
+      const normalized = normalizeImportedText(content);
+      if (!normalized) throw new Error("鏂囦欢鍐呭涓虹┖");
+      const parsed = splitChapters(normalized);
+      return {
+        title: stripExt(filename) || `鏈懡鍚峗${Date.now()}`,
+        summary: "",
+        content: normalized,
+        hasChapters: parsed.explicit,
+        chapters: parsed.chapters,
+        ext,
+        done: false
+      };
+    }
+
+    async function parseBulkFiles() {
+      if (!bulkFilesInput.files || !bulkFilesInput.files.length) {
+        bulkStatus.textContent = "璇峰厛閫夋嫨鏂囦欢";
+        return;
+      }
+      bulkStatus.textContent = "姝ｅ湪璇诲彇鏂囦欢...";
+      const files = Array.from(bulkFilesInput.files);
+      const drafts = [];
+      let failed = 0;
+      for (const file of files) {
+        try {
+          const draft = await parseOneFile(file);
+          drafts.push(draft);
+        } catch {
+          failed += 1;
+        }
+      }
+      queueDrafts = drafts;
+      queueCursor = drafts.length ? 0 : -1;
+      renderQueuePreview();
+      if (queueCursor >= 0) fillEditorFromDraft(queueDrafts[0]);
+      bulkStatus.textContent = failed
+        ? `璇诲彇瀹屾垚锛氭垚鍔?${drafts.length}锛屽け璐?${failed}`
+        : `璇诲彇瀹屾垚锛氬叡 ${drafts.length} 绡嘸;
+    }
+
+    function clearQueue() {
+      queueDrafts = [];
+      queueCursor = -1;
+      renderQueuePreview();
+      bulkStatus.textContent = "闃熷垪宸叉竻绌?;
+    }
+
+    function setEditing(article) {
+      editingArticleId = article.id;
+      titleInput.value = article.title || "";
+      tagsInput.value = Array.isArray(article.tags) ? article.tags.join(" ") : "";
+      summaryInput.value = article.summary || "";
+
+      const raw = String(article.content || "");
+      const parsed = splitChapters(raw);
+      if (parsed.explicit) {
+        setChapterMode(true);
+        chapterList.innerHTML = "";
+        parsed.chapters.forEach((ch, i) => createChapterItem(ch.title || `绗?{i + 1}绔燻, ch.content || ""));
+      } else {
+        setChapterMode(false);
+        contentInput.value = raw;
+      }
+
+      submitButton.textContent = "鏇存柊";
+      cancelEditButton.classList.remove("hidden");
+      publishStatus.textContent = `姝ｅ湪缂栬緫锛?{article.title || ""}`;
+      const radio = document.querySelector(`input[name="scope"][value="${article.category || ""}"]`);
+      if (radio) radio.checked = true;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function clearEditing() {
+      editingArticleId = null;
+      submitButton.textContent = "鍙戝竷";
+      cancelEditButton.classList.add("hidden");
+      clearEditorKeepTagsAndScope();
+    }
+
+    function renderPublishedArticles(items) {
+      if (!items.length) {
+        publishedList.innerHTML = '<div class="empty-state">鏆傛棤鏂囩珷</div>';
+        return;
+      }
+
+      publishedList.innerHTML = items.map((item) => {
+        const date = String(item.created_at || "").slice(0, 10);
+        const readHref = `./read.html?id=${encodeURIComponent(item.id)}&back=${encodeURIComponent("publish.html")}`;
+        const actions = canPublish ? `
+          <div class="published-item__actions">
+            <button class="button button--ghost published-export" data-id="${item.id}" type="button">瀵煎嚭TXT</button>
+            <button class="button button--ghost published-edit" data-id="${item.id}" type="button">缂栬緫</button>
+            <button class="button button--ghost published-delete" data-id="${item.id}" type="button">鍒犻櫎</button>
+          </div>
+        ` : "";
+        return `
+          <div class="published-item">
+            <div class="published-item__meta">
+              <a class="published-item__title" href="${readHref}">${escapeHtml(item.title || "鏈懡鍚?)}</a>
+              <div class="published-item__right">
+                <span>${escapeHtml(date)}</span>
+                ${actions}
+              </div>
+            </div>
+            <div class="published-item__meta">
+              <span>鍒嗙被锛?{escapeHtml(item.category || "")}</span>
+              <span></span>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      publishedList.querySelectorAll(".published-edit").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const id = button.getAttribute("data-id");
+          if (!id) return;
+          try {
+            const rows = await apiFetch(`/rest/v1/articles?select=*&id=eq.${id}&limit=1`, { auth: true });
+            if (!Array.isArray(rows) || !rows[0]) return;
+            setEditing(rows[0]);
+          } catch (err) {
+            publishStatus.textContent = `璇诲彇澶辫触锛?{err.message}`;
+          }
+        });
+      });
+
+      publishedList.querySelectorAll(".published-export").forEach((button) => {
+        button.addEventListener("click", () => {
+          const id = button.getAttribute("data-id");
+          const article = items.find((it) => String(it.id) === String(id));
+          if (!article) return;
+          const raw = String(article.content || "");
+          const safeName = String(article.title || "article").replace(/[\\/:*?"<>|]/g, "_").trim() || "article";
+          const blob = new Blob(["\uFEFF" + raw], { type: "text/plain;charset=utf-8" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${safeName}.txt`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        });
+      });
+
+      publishedList.querySelectorAll(".published-delete").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const id = button.getAttribute("data-id");
+          if (!id) return;
+          const ok = window.confirm("纭畾鍒犻櫎杩欑瘒鏂囩珷鍚楋紵");
+          if (!ok) return;
+          try {
+            await apiFetch(`/rest/v1/articles?id=eq.${id}`, { method: "DELETE", auth: true });
+            if (String(editingArticleId) === String(id)) clearEditing();
+            await loadPublishedArticles();
+          } catch (err) {
+            publishStatus.textContent = `鍒犻櫎澶辫触锛?{err.message}`;
+          }
+        });
+      });
+    }
+
+    function getFilteredPublishedArticles() {
+      const selectedScope = document.querySelector('input[name="publishedScope"]:checked');
+      const scope = selectedScope ? selectedScope.value : "all";
+      const keyword = normalizeText(publishedSearch.value);
+      const scoped = publishedArticlesCache.filter((item) => {
+        const cat = String(item.category || "").trim();
+        if (cat !== "浜ら€? && cat !== "娓呮按") return false;
+        return scope === "all" ? true : cat === scope;
+      });
+      if (!keyword) return scoped;
+      return scoped.filter((item) => {
+        const tagsText = Array.isArray(item.tags) ? item.tags.join(" ") : "";
+        const raw = [item.title, item.category, item.summary, tagsText, item.content].join(" ");
+        return normalizeText(raw).includes(keyword);
+      });
+    }
+
+    function renderPublishedListBySearch() {
+      renderPublishedArticles(getFilteredPublishedArticles());
+    }
+
+    async function loadPublishedArticles() {
+      let rows = [];
+      let authError = null;
+      if (canPublish) {
+        try {
+          const adminRows = await apiFetch(`/rest/v1/articles?select=id,title,category,tags,summary,content,created_at&order=created_at.desc`, { auth: true });
+          rows = Array.isArray(adminRows) ? adminRows : [];
+        } catch (err) {
+          authError = err;
+        }
+      }
+      if (!rows.length) {
+        try {
+          const publicRows = await apiFetch(`/rest/v1/articles?select=id,title,category,tags,summary,content,created_at&order=created_at.desc`, { auth: false });
+          rows = Array.isArray(publicRows) ? publicRows : [];
+        } catch (err) {
+          if (!authError) authError = err;
+        }
+      }
+      publishedArticlesCache = rows;
+      renderPublishedListBySearch();
+      if (!rows.length && authError) publishStatus.textContent = `鍒楄〃璇诲彇寮傚父锛?{authError.message || "鏈煡閿欒"}`;
+    }
+
+    async function initPageAuth() {
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        canPublish = false;
+        submitButton.disabled = true;
+        publishStatus.textContent = "褰撳墠鏈厤缃?Supabase銆?;
+        await loadPublishedArticles();
+        return;
+      }
+      const session = getSession();
+      const loggedIn = Boolean(session?.access_token);
+      const admin = loggedIn ? await checkAdmin() : false;
+      canPublish = Boolean(admin);
+      submitButton.disabled = !admin;
+      if (!loggedIn) publishStatus.textContent = "璇峰厛鍦ㄨ缃〉鐧诲綍绠＄悊鍛樿处鍙枫€?;
+      else if (!admin) publishStatus.textContent = "褰撳墠璐﹀彿涓嶆槸绠＄悊鍛樸€?;
+      else publishStatus.textContent = "";
+      await loadPublishedArticles();
+      renderQueuePreview();
+    }
+
+    function applyIndentToText(raw) {
+      const paragraphs = String(raw || "")
+        .replace(/\r\n/g, "\n")
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => `銆€銆€${line.replace(/^銆€銆€/, "")}`);
+      return paragraphs.join("\n\n");
+    }
+
+    cancelEditButton.addEventListener("click", () => {
+      clearEditing();
+      publishStatus.textContent = "";
+    });
+
+    reloadArticles.addEventListener("click", async () => {
+      await loadPublishedArticles();
+    });
+
+    publishedSearch.addEventListener("input", renderPublishedListBySearch);
+    document.querySelectorAll('input[name="publishedScope"]').forEach((radio) => {
+      radio.addEventListener("change", renderPublishedListBySearch);
+    });
+
+    chapterMode.addEventListener("change", (e) => {
+      setChapterMode(e.target.checked);
+    });
+
+    applyChapterCountButton.addEventListener("click", () => {
+      setChapterMode(true);
+      setChapterCount(chapterCountInput.value);
+    });
+
+    addChapterButton.addEventListener("click", () => {
+      setChapterMode(true);
+      createChapterItem(`绗?{chapterList.querySelectorAll(".chapter-item").length + 1}绔燻, "");
+    });
+
+    indentFormatButton.addEventListener("click", () => {
+      if (chapterMode.checked) {
+        chapterList.querySelectorAll(".chapter-item textarea").forEach((ta) => {
+          ta.value = applyIndentToText(ta.value);
+        });
+      } else {
+        contentInput.value = applyIndentToText(contentInput.value);
+      }
+    });
+
+    bulkParseButton.addEventListener("click", parseBulkFiles);
+    queueDoneNextButton.addEventListener("click", finishCurrentAndNext);
+    queueClearButton.addEventListener("click", clearQueue);
+
+    publishForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      publishStatus.textContent = "";
+
+      const title = titleInput.value.trim();
+      const summary = summaryInput.value.trim();
+      const tags = getCommonTags();
+      const content = chapterMode.checked ? buildContentFromChapters() : contentInput.value.trim();
+      const category = getScope();
+
+      if (!title || !content) return;
+      if (!canPublish) {
+        publishStatus.textContent = "娌℃湁鍙戝竷鏉冮檺锛岃鍏堢櫥褰曠鐞嗗憳銆?;
+        return;
+      }
+
+      publishStatus.textContent = editingArticleId ? "鏇存柊涓?.." : "鍙戝竷涓?..";
+      try {
+        if (editingArticleId) {
+          await apiFetch(`/rest/v1/articles?id=eq.${editingArticleId}`, {
+            method: "PATCH",
+            auth: true,
+            body: { title, category, tags, summary, content }
+          });
+        } else {
+          await apiFetch(`/rest/v1/articles`, {
+            method: "POST",
+            auth: true,
+            body: { title, category, tags, summary, content }
+          });
+        }
+      } catch (err) {
+        publishStatus.textContent = `鎿嶄綔澶辫触锛?{err.message}`;
+        return;
+      }
+
+      publishStatus.textContent = editingArticleId ? "宸叉洿鏂? : "宸插彂甯?;
+      tagsInput.value = "";
+      const queueActive = queueCursor >= 0 && queueCursor < queueDrafts.length;
+      if (!editingArticleId && queueActive) {
+        finishCurrentAndNext();
+      } else {
+        clearEditing();
+      }
+      await loadPublishedArticles();
+    });
+
+    initPageAuth();
+  </script>
+</body>
+</html>
+

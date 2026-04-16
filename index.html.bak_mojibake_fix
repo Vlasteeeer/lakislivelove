@@ -1,0 +1,216 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lakis' ROOM</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="gate" class="gate">
+    <div class="gate__card">
+      <p class="gate__text">鍙兘瀛樻湁鎴愪汉鍚戝唴瀹癸紝鏄惁缁х画锛?/p>
+      <div class="gate__actions">
+        <button id="gateEnter" class="button button--solid" type="button">鏄?/button>
+      </div>
+    </div>
+  </div>
+
+  <main id="home" class="home hidden">
+    <div class="home__top-actions">
+      <a id="publishEntry" class="home__top-button" href="publish.html">鍙戝竷</a>
+      <a id="messageEntry" class="home__top-button hidden" href="messages.html">娑堟伅</a>
+    </div>
+
+    <div class="home__center">
+      <div class="home__title-block">
+        <h1 class="home__title">Lakis' ROOM</h1>
+        <p class="home__corner-note">鏋曠鐨勫皬灞?/p>
+      </div>
+      <img class="home__image" src="妫夎姳.jpg" alt="Lakis' ROOM">
+      <p class="home__subtitle">娆㈣繋鏉ヨ^^</p>
+    </div>
+
+    <div class="home__footer">
+      <div class="home__search-row">
+        <input id="searchInput" class="home__search" type="search" placeholder="鎼滅储">
+        <button id="homeSearchBtn" class="button button--solid" type="button">鎼滅储</button>
+      </div>
+      <div class="home__categories">
+        <button class="category" type="button" data-link="qingshui.html">娓呮按</button>
+        <button class="category" type="button" data-link="traffic.html">浜ら€?/button>
+        <button class="category" type="button" data-link="guestbook.html">鐣欒█澧?/button>
+      </div>
+      <a class="settings-link" href="settings.html">璁剧疆</a>
+    </div>
+  </main>
+
+  <script src="config.js"></script>
+  <script>
+    (function () {
+      const SUPABASE_URL = window.SUPABASE_URL;
+      const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
+      const SESSION_KEY = "lakis_room_session";
+
+      const gate = document.getElementById("gate");
+      const home = document.getElementById("home");
+      const enter = document.getElementById("gateEnter");
+      const searchInput = document.getElementById("searchInput");
+      const homeSearchBtn = document.getElementById("homeSearchBtn");
+      const categories = document.querySelectorAll(".category");
+      const publishEntry = document.getElementById("publishEntry");
+      const messageEntry = document.getElementById("messageEntry");
+
+      function getSession() {
+        try {
+          const raw = localStorage.getItem(SESSION_KEY);
+          if (!raw) return null;
+          const session = JSON.parse(raw);
+          if (!session || !session.access_token || !session.expires_at) return null;
+          if (Date.now() / 1000 > session.expires_at) return null;
+          return session;
+        } catch {
+          return null;
+        }
+      }
+
+      function refreshTopButtons() {
+        const loggedIn = Boolean(getSession()?.access_token);
+        if (messageEntry) messageEntry.classList.toggle("hidden", !loggedIn);
+      }
+
+      function normalizeCategory(value) {
+        const raw = String(value || "").trim();
+        const lower = raw.toLowerCase();
+        if (lower === "pure" || raw.includes("娓呮按") || raw.includes("濞?)) return "pure";
+        if (lower === "traffic" || raw.includes("浜ら€?) || raw.includes("娴?)) return "traffic";
+        return "";
+      }
+
+      function matchKeyword(item, keyword) {
+        const tags = Array.isArray(item.tags) ? item.tags.join(" ") : String(item.tags || "");
+        const text = [item.title, tags].join(" ").toLowerCase();
+        return text.includes(keyword.toLowerCase());
+      }
+
+      async function checkAdminPermission() {
+        if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return false;
+        const session = getSession();
+        if (!session?.access_token || !session?.user?.email) return false;
+
+        const url =
+          `${SUPABASE_URL}/rest/v1/admins?select=email` +
+          `&email=eq.${encodeURIComponent(session.user.email)}&limit=1`;
+
+        try {
+          const res = await fetch(url, {
+            headers: {
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${session.access_token}`
+            }
+          });
+          if (!res.ok) return false;
+          const data = await res.json();
+          return Array.isArray(data) && data.length > 0;
+        } catch {
+          return false;
+        }
+      }
+
+      const openHome = () => {
+        gate.classList.add("hidden");
+        home.classList.remove("hidden");
+        localStorage.setItem("lakis_gate_passed", "1");
+      };
+
+      const params = new URLSearchParams(window.location.search);
+      const skipGate = params.get("skipGate") === "1";
+      const hasPassed = localStorage.getItem("lakis_gate_passed") === "1";
+
+      if (skipGate || hasPassed) {
+        openHome();
+      } else if (enter) {
+        enter.addEventListener("click", openHome);
+      }
+
+      categories.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          categories.forEach((item) => item.classList.remove("is-active"));
+          btn.classList.add("is-active");
+          const link = btn.dataset.link;
+          if (link) {
+            window.location.href = link;
+            return;
+          }
+          const tag = btn.dataset.tag || "";
+          if (searchInput) searchInput.value = tag;
+        });
+      });
+
+      async function runSearch() {
+        const keyword = (searchInput?.value || "").trim();
+        if (!keyword) return;
+        let rows = [];
+        if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+          try {
+            const res = await fetch(
+              `${SUPABASE_URL}/rest/v1/articles?select=id,title,tags,category,created_at&order=created_at.desc`,
+              { headers: { apikey: SUPABASE_ANON_KEY } }
+            );
+            if (res.ok) {
+              const data = await res.json();
+              rows = Array.isArray(data) ? data : [];
+            }
+          } catch {
+            rows = [];
+          }
+        }
+        if (!rows.length && Array.isArray(window.ARTICLES)) {
+          rows = window.ARTICLES.slice();
+        }
+        const matches = rows.filter((item) => matchKeyword(item, keyword));
+        if (!rows.length) {
+          window.location.href = `traffic.html?q=${encodeURIComponent(keyword)}`;
+          return;
+        }
+        if (!matches.length) {
+          window.alert("娌℃湁鎵惧埌鐩稿叧鏂囩珷銆?);
+          return;
+        }
+        const cat = normalizeCategory(matches[0].category);
+        const target = cat === "pure" ? "qingshui.html" : "traffic.html";
+        window.location.href = `${target}?q=${encodeURIComponent(keyword)}`;
+      }
+
+      if (homeSearchBtn) {
+        homeSearchBtn.addEventListener("click", runSearch);
+      }
+      if (searchInput) {
+        searchInput.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            runSearch();
+          }
+        });
+      }
+
+      if (publishEntry) {
+        publishEntry.addEventListener("click", async (event) => {
+          event.preventDefault();
+          const allowed = await checkAdminPermission();
+          if (!allowed) {
+            window.alert("鎶辨瓑锛屾殏鏃犳潈闄愩€?);
+            return;
+          }
+          window.location.href = "publish.html";
+        });
+      }
+
+      refreshTopButtons();
+      window.addEventListener("focus", refreshTopButtons);
+      window.addEventListener("storage", refreshTopButtons);
+    })();
+  </script>
+</body>
+</html>
+
