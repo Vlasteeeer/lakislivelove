@@ -160,6 +160,7 @@
     let articleId = id;
     let isAdmin = false;
     let selectionState = null;
+    let selectionAnchorRect = null;
     let copyHintTimer = null;
     let selectionCheckTimer = null;
     const READ_FONT_SIZE_KEY = "lakis_room_read_font_size";
@@ -298,13 +299,41 @@
       return { chapters: chunks, explicit };
     }
 
-    function hideSelectionPopover() {
+    function hideSelectionPopover(force = false) {
       if (!selectionPopover) return;
       const active = document.activeElement;
-      if (active && selectionPopover.contains(active)) return;
+      if (!force && active && selectionPopover.contains(active)) return;
       selectionPopover.classList.add("hidden");
       selectionPopover.setAttribute("aria-hidden", "true");
       selectionState = null;
+      selectionAnchorRect = null;
+    }
+
+    function getKeyboardInset() {
+      const vv = window.visualViewport;
+      if (!vv) return 0;
+      const diff = window.innerHeight - (vv.height + vv.offsetTop);
+      return diff > 0 ? diff : 0;
+    }
+
+    function placeSelectionPopoverFromRect(rect) {
+      if (!selectionPopover || !rect) return;
+      const keyboardInset = getKeyboardInset();
+      const popoverWidth = Math.min(320, Math.max(260, selectionPopover.offsetWidth || 320));
+      const maxLeft = Math.max(12, window.innerWidth - popoverWidth - 12);
+      const left = Math.max(12, Math.min(rect.left, maxLeft));
+
+      const popoverHeight = selectionPopover.offsetHeight || 220;
+      const preferTop = rect.bottom + 8;
+      const maxTop = Math.max(8, window.innerHeight - keyboardInset - popoverHeight - 12);
+      const top = Math.max(8, Math.min(preferTop, maxTop));
+
+      selectionPopover.style.top = `${top}px`;
+      selectionPopover.style.left = `${left}px`;
+    }
+
+    function placeSelectionPopover() {
+      placeSelectionPopoverFromRect(selectionAnchorRect);
     }
 
     function getSavedReadFontSize() {
@@ -339,15 +368,15 @@
           ? rect
           : fallbackRect;
       if (!targetRect) return;
-      const maxLeft = Math.max(12, window.innerWidth - 340);
-      const left = Math.max(12, Math.min(targetRect.left, maxLeft));
-      const top = Math.max(8, targetRect.bottom + 8);
-      selectionPopover.style.top = `${top}px`;
-      selectionPopover.style.left = `${left}px`;
+      selectionAnchorRect = {
+        left: targetRect.left,
+        bottom: targetRect.bottom
+      };
       selectionPreview.textContent = text.length > 120 ? `${text.slice(0, 120)}...` : text;
       selectionPopover.classList.remove("hidden");
       selectionPopover.setAttribute("aria-hidden", "false");
       selectionState = { paragraphIndex, text };
+      placeSelectionPopover();
     }
 
     function handleSelection() {
@@ -565,7 +594,7 @@
           .map((c) => {
             const hasSelection = c.comment_type === "selection" && c.selection_text;
             const selectionLabel = hasSelection
-              ? `<p class="selection-note">段落 ${Number(c.paragraph_index || 0) + 1}：${escapeHtml(c.selection_text)}</p>`
+              ? `<p class="selection-note">${escapeHtml(c.selection_text)}</p>`
               : "";
             return `
               <div class="comment">
@@ -655,7 +684,7 @@
         return;
       }
       selectionComment.value = "";
-      hideSelectionPopover();
+      hideSelectionPopover(true);
       await loadComments();
     }
 
@@ -725,6 +754,14 @@
         const v = event.target.value.trim();
         if (v) saveName(v);
       });
+      selectionAuthor.addEventListener("focus", () => {
+        window.setTimeout(placeSelectionPopover, 80);
+      });
+    }
+    if (selectionComment) {
+      selectionComment.addEventListener("focus", () => {
+        window.setTimeout(placeSelectionPopover, 80);
+      });
     }
 
     commentFormEl.addEventListener("submit", submitComment);
@@ -764,6 +801,13 @@
       if (!selectionPopover) return;
       if (!selectionPopover.contains(event.target)) hideSelectionPopover();
     });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", placeSelectionPopover);
+      window.visualViewport.addEventListener("scroll", placeSelectionPopover);
+    } else {
+      window.addEventListener("resize", placeSelectionPopover);
+      window.addEventListener("scroll", placeSelectionPopover, { passive: true });
+    }
 
     checkAdmin().then(loadArticle);
   </script>

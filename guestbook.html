@@ -146,6 +146,20 @@
       saveHiddenIds(hidden);
     }
 
+    async function archiveGuestbookNote(id) {
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !id) return true;
+      try {
+        await apiFetch(`/rest/v1/comments?id=eq.${id}`, {
+          method: "PATCH",
+          body: { comment_type: "guestbook_archived" },
+          auth: true
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
     function clamp(num, min, max) {
       return Math.max(min, Math.min(max, num));
     }
@@ -404,16 +418,8 @@
               notesCache = removeLocalNoteById(id);
               return;
             }
-
-            try {
-              await apiFetch(`/rest/v1/comments?id=eq.${id}`, {
-                method: "PATCH",
-                body: { comment_type: "guestbook_archived" },
-                auth: true
-              });
-            } catch (err) {
-              statusEl.textContent = `已从墙面删除（数据库同步失败：${err.message}）`;
-            }
+            const okSync = await archiveGuestbookNote(id);
+            if (!okSync) statusEl.textContent = "已从墙面删除（云端同步失败）";
           });
         });
       }
@@ -537,10 +543,16 @@
       const ok = window.confirm("确认清空留言墙全部便利贴？");
       if (!ok) return;
 
+      const idsToHide = notesCache.map((item) => String(item.id)).filter(Boolean);
+      markHiddenIds(idsToHide);
+      notesCache = [];
+      renderNotes(notesCache);
+      pendingNote = null;
+      removeGhost();
+      wall.classList.remove("is-placing");
+
       if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
         saveLocalNotes([]);
-        notesCache = [];
-        renderNotes(notesCache);
         statusEl.textContent = "已清空。";
         return;
       }
@@ -548,18 +560,15 @@
       try {
         await ensureGuestbookArticle();
         if (!guestbookArticleId) throw new Error("留言墙未初始化");
-        await apiFetch(
-          `/rest/v1/comments?article_id=eq.${guestbookArticleId}&comment_type=eq.guestbook`,
-          {
-            method: "PATCH",
-            auth: true,
-            body: { comment_type: "guestbook_archived" }
-          }
-        );
-        statusEl.textContent = "已清空。";
-        await loadNotes();
-      } catch (err) {
-        statusEl.textContent = `清空失败：${err.message}`;
+        let synced = true;
+        for (const id of idsToHide) {
+          if (String(id).startsWith("local-")) continue;
+          const okSync = await archiveGuestbookNote(id);
+          if (!okSync) synced = false;
+        }
+        statusEl.textContent = synced ? "已清空。" : "已清空（云端同步部分失败）";
+      } catch {
+        statusEl.textContent = "已清空（云端同步失败）";
       }
     }
 
